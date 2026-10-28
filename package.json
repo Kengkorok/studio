@@ -1,0 +1,28 @@
+{
+  "name": "studio",
+  "private": true,
+  "type": "module",
+  "description": "Editor blog untuk korokk.com: tulis, upload gambar, terbit terus ke GitHub Pages.",
+  "scripts": {
+    "build": "esbuild client/app.js --bundle --minify --format=esm --target=es2022 --outfile=public/app.js && cp client/index.html client/styles.css public/",
+    "start": "node server/index.js",
+    "dev": "npm run build && ALLOW_NO_AUTH=1 node --watch server/index.js"
+  },
+  "engines": { "node": ">=22.13" },
+  "dependencies": {
+    "@hono/node-server": "2.1.5",
+    "hono": "4.13.13",
+    "marked": "18.1.1",
+    "sharp": "0.35.5",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@tiptap/core": "3.32.0",
+    "@tiptap/extension-bubble-menu": "3.32.0",
+    "@tiptap/extension-image": "3.32.0",
+    "@tiptap/extensions": "3.32.0",
+    "@tiptap/pm": "3.32.0",
+    "@tiptap/starter-kit": "3.32.0",
+    "esbuild": "0.28.2"
+  }
+}

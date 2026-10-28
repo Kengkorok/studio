@@ -1,0 +1,11 @@
+services:
+  studio:
+    build: .
+    image: korok-studio:latest
+    container_name: studio
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "127.0.0.1:8460:8460"   # hanya untuk cloudflared di mesin yang sama
+    volumes:
+      - ./data:/data

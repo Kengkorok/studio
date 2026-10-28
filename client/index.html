@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="robots" content="noindex">
+  <title>Studio · korokk.com</title>
+  <script>
+    // Tema: ikut sistem, atau pilihan yang disimpan
+    try { const t = localStorage.getItem('studio-tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
+  </script>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231B1C1E'/%3E%3Cpath d='M9 22l3-1 9-9-2-2-9 9z' fill='%23E8E8E4'/%3E%3Ccircle cx='23' cy='9' r='2.5' fill='%23C9A14A'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Host+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="top">
+    <a class="top__brand" href="#/"><span class="top__dot" aria-hidden="true"></span>Studio</a>
+    <nav class="top__nav">
+      <a href="#/" data-nav="tulisan">Tulisan</a>
+      <a href="#/komen" data-nav="komen">Komen <span class="badge" id="komen-count" hidden></span></a>
+    </nav>
+    <div class="top__end">
+      <button class="icon-btn" id="tema" type="button" aria-label="Tukar tema" title="Tukar tema">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+      </button>
+      <a class="top__site mono" id="site-link" href="https://korokk.com/blog/" target="_blank" rel="noopener">korokk.com ↗</a>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <dialog class="dlg" id="dlg">
+    <form method="dialog" class="dlg__form">
+      <p class="dlg__title" id="dlg-title"></p>
+      <p class="dlg__text" id="dlg-text"></p>
+      <input class="input" id="dlg-input" autocomplete="off" hidden>
+      <div class="dlg__actions">
+        <button class="btn" value="batal" type="submit">Batal</button>
+        <button class="btn btn--ink" value="ok" type="submit" id="dlg-ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>

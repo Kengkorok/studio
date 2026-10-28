@@ -46,15 +46,15 @@ export async function ogCard({ title, date, tags = [] }) {
   const top = 630 - 120 - (lines.length - 1) * lineH;
   const tagText = tags.slice(0, 3).map((t) => `#${t}`).join('  ');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
-  <rect width="1200" height="630" fill="#E8E8E4"/>
-  <rect x="0" y="0" width="1200" height="10" fill="#2E5E4E"/>
-  <circle cx="1112" cy="84" r="9" fill="#C9A14A"/>
-  <text x="72" y="96" font-family="JetBrains Mono" font-size="26" fill="#6B6D70">korokk.com/blog</text>
-  <text font-family="Bricolage Grotesque" font-weight="600" font-size="${size}" letter-spacing="${-(size * 0.045).toFixed(1)}" fill="#1B1C1E">
+  <rect width="1200" height="630" fill="#F1EBE0"/>
+  <rect x="0" y="0" width="1200" height="10" fill="#9E4A2F"/>
+  <circle cx="1112" cy="84" r="9" fill="#3F6B57"/>
+  <text x="72" y="96" font-family="JetBrains Mono" font-size="26" fill="#7A6A5C">korokk.com/blog</text>
+  <text font-family="Bricolage Grotesque" font-weight="600" font-size="${size}" letter-spacing="${-(size * 0.045).toFixed(1)}" fill="#2B211A">
     ${lines.map((l, i) => `<tspan x="68" y="${top + i * lineH}">${esc(l)}</tspan>`).join('\n    ')}
   </text>
-  <text x="72" y="572" font-family="JetBrains Mono" font-size="24" fill="#6B6D70">${esc(date)}</text>
-  <text x="1128" y="572" text-anchor="end" font-family="JetBrains Mono" font-size="24" fill="#2E5E4E">${esc(tagText)}</text>
+  <text x="72" y="572" font-family="JetBrains Mono" font-size="24" fill="#7A6A5C">${esc(date)}</text>
+  <text x="1128" y="572" text-anchor="end" font-family="JetBrains Mono" font-size="24" fill="#9E4A2F">${esc(tagText)}</text>
 </svg>`;
   return sharp(Buffer.from(svg), { density: 72 }).png({ compressionLevel: 9 }).toBuffer();
 }

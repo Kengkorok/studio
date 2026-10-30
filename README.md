@@ -13,11 +13,19 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
 - **Gambar:**
   - Tampal, seret atau pilih fail.
   - Gambar dikecilkan ke WebP (lebar maks 1600px) dan metadata (termasuk lokasi GPS) dibuang.
+- **Video:**
+  - Upload (butang, tampal atau seret) sehingga 1GB dan 10 minit. Dihantar dalam cebisan 32MB sebab Cloudflare hadkan 100MB setiap permintaan.
+  - ffmpeg tukar ke MP4 H.264 (sisi panjang maks 1280px), buang metadata dan jana poster WebP. Hasil mesti bawah 45MB supaya repo laman kekal kecil.
+  - Video panjang: butang YouTube (atau tampal link YouTube terus), embed guna youtube-nocookie.com.
 - **Draf:** disimpan automatik dalam SQLite di server. GitHub hanya dapat commit bila kau tekan Terbit.
 - **Imej OG automatik:** post tanpa cover dapat kad 1200x630 bertajuk untuk pratonton link WhatsApp/Threads.
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.
 - **Moderasi komen:** luluskan atau padam komen "nama sahaja" dari Worker `komen`.
+- **Statistik:** page view dan pelawat (sepanjang masa, 7 hari lepas, tahun ini), post paling dibaca, bilangan post dan komen.
+  - Dikira oleh `main.js` di laman (`/hit` pada Worker `komen`, jadual `lawatan` dalam D1).
+  - Browser yang buka Studio dapat cookie `korok_abai` pada `.korokk.com` dan tak dikira. Peranti lain: buka `korokk.com/?abai=1` sekali (`?abai=0` untuk batal).
+  - Bilangan komen GitHub (giscus) perlukan permission **Discussions: Read** pada token.
 - **Tema:** cerah/gelap ikut sistem, dengan butang tukar.
 - **Phone:** toolbar duduk di atas papan kekunci.
 
@@ -27,7 +35,8 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
 
 GitHub → Settings → Developer settings → **Fine-grained tokens** → Generate new token:
 - Repository access: **Only select repositories** → `Kengkorok.github.io`
-- Permissions: **Contents: Read and write** (yang lain biarkan)
+- Permissions: **Contents: Read and write**
+- Pilihan: **Discussions: Read**, untuk bilangan komen giscus dalam Statistik
 
 ### 2. Cloudflare Tunnel dan Access
 
@@ -70,7 +79,8 @@ Port hanya dibuka di `127.0.0.1:8460`, jadi Studio tak boleh dicapai dari LAN at
 
 Terbit menghasilkan **satu commit** yang mengandungi:
 - `_posts/TARIKH-slug.html`: front matter (tajuk, ringkasan, tag, imej) dan isi HTML dalam `{% raw %}` supaya Liquid tak usik teks.
-- `assets/blog/TAHUN/slug/*.webp`: gambar yang digunakan.
+- `assets/blog/TAHUN/slug/*.webp`: gambar (dan poster video) yang digunakan.
+- `assets/blog/TAHUN/slug/*.mp4`: video yang diupload.
 - `assets/blog/TAHUN/slug/og.png`: imej OG automatik (kalau tiada cover).
 
 Kalau slug atau tarikh post lama ditukar, fail lama dibuang dalam commit yang sama. **Tarik balik** buang fail post dari repo, tapi draf kekal dalam Studio.
@@ -87,7 +97,9 @@ cp .env.example .env
 npm run dev     # ALLOW_NO_AUTH=1, http://127.0.0.1:8460
 ```
 
-Kod: `server/` (Hono, node:sqlite, sharp) dan `client/` (TipTap, dibundle dengan esbuild).
+Perlukan `ffmpeg` dalam PATH untuk video.
+
+Kod: `server/` (Hono, node:sqlite, sharp, ffmpeg) dan `client/` (TipTap, dibundle dengan esbuild).
 
 ## Kredit
 

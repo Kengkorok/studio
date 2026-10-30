@@ -6,8 +6,8 @@ COPY client ./client
 RUN npm run build
 
 FROM node:22-slim
-# fontconfig untuk teks dalam imej OG
-RUN apt-get update && apt-get install -y --no-install-recommends fontconfig ca-certificates && rm -rf /var/lib/apt/lists/*
+# fontconfig untuk teks dalam imej OG, ffmpeg untuk tukar video
+RUN apt-get update && apt-get install -y --no-install-recommends fontconfig ca-certificates ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV NODE_ENV=production DATA_DIR=/data HOST=0.0.0.0 PORT=8460 NODE_NO_WARNINGS=1
 COPY package.json package-lock.json ./

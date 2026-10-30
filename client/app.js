@@ -1,7 +1,8 @@
 // Studio: senarai tulisan, editor dan moderasi komen
-import { Editor } from '@tiptap/core';
+import { Editor, Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
+import Youtube from '@tiptap/extension-youtube';
 import BubbleMenu from '@tiptap/extension-bubble-menu';
 import { Placeholder } from '@tiptap/extensions';
 
@@ -12,6 +13,19 @@ const tarikh = (iso) => { const [y, m, d] = iso.split('-'); return `${d} ${BULAN
 const jam = (iso) => new Date(iso).toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit', hour12: false });
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 let me = { site: 'https://korokk.com', komen: false };
+const YOUTUBE_RE = /^(https?:\/\/)?((www|m|music)\.)?(youtube\.com|youtu\.be|youtube-nocookie\.com)\//;
+const nombor = (n) => (n ?? 0).toLocaleString('ms-MY');
+
+// Video yang diupload: satu blok <video> (tanpa node ni TipTap buang tag video, termasuk dalam mod HTML)
+const Video = Node.create({
+  name: 'video',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  addAttributes: () => ({ src: { default: null }, poster: { default: null }, width: { default: null }, height: { default: null } }),
+  parseHTML: () => [{ tag: 'video[src]' }],
+  renderHTML: ({ HTMLAttributes }) => ['video', mergeAttributes(HTMLAttributes, { controls: '', playsinline: '', preload: 'metadata' })],
+});
 
 // ---------- Pembantu ----------
 
@@ -75,11 +89,13 @@ let cleanup = null;
 async function route() {
   if (cleanup) { await cleanup(); cleanup = null; }
   const hash = location.hash.slice(1) || '/';
-  document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('is-on', a.dataset.nav === (hash.startsWith('/komen') ? 'komen' : 'tulisan')));
+  const nav = hash.startsWith('/komen') ? 'komen' : hash.startsWith('/statistik') ? 'statistik' : 'tulisan';
+  document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('is-on', a.dataset.nav === nav));
   const m = hash.match(/^\/tulis\/([0-9a-f-]{36})$/);
   try {
     if (m) await editorView(m[1]);
-    else if (hash.startsWith('/komen')) await komenView();
+    else if (nav === 'komen') await komenView();
+    else if (nav === 'statistik') await statistikView();
     else await listView();
   } catch (e) {
     view.innerHTML = `<section class="page"><p class="empty">${esc(e.message)}</p></section>`;
@@ -139,13 +155,15 @@ const TOOLS = [
   ['ordered', '<svg viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10M4 5h1.5v3M3.5 14h2.5l-2.5 3h2.5"/></svg>', 'Senarai bernombor'],
   ['quote', '<svg viewBox="0 0 24 24"><path d="M6 17h4v-5H7a3 3 0 0 1 3-3V7a5 5 0 0 0-5 5zm8 0h4v-5h-3a3 3 0 0 1 3-3V7a5 5 0 0 0-5 5z"/></svg>', 'Petikan'], '|',
   ['image', '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>', 'Gambar'],
+  ['video', '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-3v9l-5-3z"/></svg>', 'Video (upload)'],
+  ['youtube', '<svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.2 5 2.8-5 2.8z"/></svg>', 'YouTube'],
   ['hr', '<svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg>', 'Garis pemisah'], '|',
   ['html', '&lt;/&gt;', 'Tukar ke HTML'],
 ];
 
 function prettyHtml(html) {
   return html
-    .replace(/>\s*(<(?:p|h[1-6]|ul|ol|li|blockquote|pre|hr|figure|img|table|div)\b)/g, '>\n$1')
+    .replace(/>\s*(<(?:p|h[1-6]|ul|ol|li|blockquote|pre|hr|figure|img|video|table|div)\b)/g, '>\n$1')
     .replace(/(<\/(?:ul|ol|blockquote|table|figure|div)>)/g, '\n$1')
     .replace(/\n{2,}/g, '\n').trim();
 }
@@ -208,11 +226,11 @@ async function editorView(id) {
           <button type="button" class="tb" data-cmd="link" aria-label="Pautan">🔗</button>
         </span>
         <span class="bubble__img">
-          <button type="button" class="tb tb--wide" data-cmd="alt">Teks alt</button>
+          <button type="button" class="tb tb--wide" data-cmd="alt" id="bubble-alt">Teks alt</button>
           <button type="button" class="tb tb--wide" data-cmd="delimg">Buang</button>
         </span>
       </div>
-      <input type="file" id="file" accept="image/*" hidden>
+      <input type="file" id="file" hidden>
     </div>`;
 
   const status = $('#status');
@@ -223,6 +241,7 @@ async function editorView(id) {
   let saveTimer = null;
   let saving = Promise.resolve();
   let pending = {};
+  let alive = true;
 
   // Autosave: kumpul perubahan dan hantar selepas 1 saat senyap
   const queue = (fields) => {
@@ -251,6 +270,8 @@ async function editorView(id) {
   const bubble = $('#bubble');
   const bubbleText = $('.bubble__text', bubble);
   const bubbleImg = $('.bubble__img', bubble);
+  const bubbleAlt = $('#bubble-alt', bubble);
+  const isMedia = (e) => ['image', 'video', 'youtube'].some((n) => e.isActive(n));
   const cmdButtons = [...view.querySelectorAll('.ed [data-cmd]')];
 
   const editor = new Editor({
@@ -262,10 +283,12 @@ async function editorView(id) {
         link: { openOnClick: false, autolink: true, defaultProtocol: 'https', HTMLAttributes: { target: null, rel: null } },
       }),
       Image.configure({ HTMLAttributes: { loading: 'lazy' } }),
-      Placeholder.configure({ placeholder: 'Mula menulis... (tampal atau seret gambar terus ke sini)' }),
+      Video,
+      Youtube.configure({ nocookie: true, width: 640, height: 360 }),
+      Placeholder.configure({ placeholder: 'Mula menulis... (tampal atau seret gambar/video terus ke sini)' }),
       BubbleMenu.configure({
         element: bubble,
-        shouldShow: ({ editor: e, state }) => !htmlMode && (e.isActive('image') || !state.selection.empty),
+        shouldShow: ({ editor: e, state }) => !htmlMode && (isMedia(e) || !state.selection.empty),
       }),
     ],
     editorProps: {
@@ -289,9 +312,10 @@ async function editorView(id) {
       b.classList.toggle('is-on', !!f?.());
       if (b.closest('#toolbar') && b.dataset.cmd !== 'html') b.disabled = htmlMode;
     });
-    const img = editor.isActive('image');
-    bubbleText.hidden = img;
-    bubbleImg.hidden = !img;
+    const media = isMedia(editor);
+    bubbleText.hidden = media;
+    bubbleImg.hidden = !media;
+    bubbleAlt.hidden = !editor.isActive('image');
   }
 
   async function editLink() {
@@ -319,7 +343,14 @@ async function editorView(id) {
     ordered: () => editor.chain().focus().toggleOrderedList().run(),
     quote: () => editor.chain().focus().toggleBlockquote().run(),
     hr: () => editor.chain().focus().setHorizontalRule().run(),
-    image: () => { fileEl.dataset.target = 'body'; fileEl.click(); },
+    image: () => pick('body', 'image/*'),
+    video: () => pick('video', 'video/*'),
+    youtube: async () => {
+      const url = await ask({ title: 'Masukkan video YouTube', text: 'Tampal link video YouTube.', input: '', ok: 'Masukkan' });
+      if (!url) return;
+      if (!YOUTUBE_RE.test(url.trim())) { toast('Link YouTube tak sah.', 'err'); return; }
+      insert({ type: 'youtube', attrs: { src: url.trim() } });
+    },
     html: toggleHtml,
     alt: async () => {
       const alt = await ask({ title: 'Teks alt gambar', text: 'Penerangan ringkas untuk pembaca skrin dan bila gambar gagal dimuat.', input: editor.getAttributes('image').alt || '', ok: 'Simpan' });
@@ -364,30 +395,75 @@ async function editorView(id) {
     toast(`Gambar sedia (${Math.round(size / 1024)} KB WebP)`, 'ok');
     return url;
   }
-  // Masukkan gambar di kursor; teks yang sedang dipilih tak diganti
-  const insertImage = (src) => {
+  // Video: hantar 32MB setiap cebisan, kemudian tunggu server siap tukar ke MP4
+  async function uploadVideo(file) {
+    if (file.size > 1024 ** 3) throw new Error('Video melebihi 1GB.');
+    const CHUNK = 32 * 1024 * 1024;
+    const up = crypto.randomUUID();
+    let off = 0;
+    do {
+      const end = Math.min(off + CHUNK, file.size);
+      const last = end >= file.size ? `&end=1&name=${encodeURIComponent(file.name)}` : '';
+      toast(`Upload ${esc(file.name)}... ${Math.round((end / file.size) * 100) || 0}%`);
+      await api(`/api/drafts/${id}/video?up=${up}&offset=${off}${last}`, { method: 'POST', form: file.slice(off, end) });
+      off = end;
+    } while (off < file.size);
+    const t0 = Date.now();
+    for (;;) {
+      toast(`Memproses video... ${Math.round((Date.now() - t0) / 1000)}s <span class="muted">(boleh terus menulis)</span>`);
+      await new Promise((r) => setTimeout(r, 2000));
+      const job = await api(`/api/drafts/${id}/video/${up}`);
+      if (job.status === 'gagal') throw new Error(job.ralat);
+      if (job.status === 'siap') {
+        toast(`Video sedia (${(job.result.size / 1048576).toFixed(1)} MB MP4)`, 'ok');
+        return job.result;
+      }
+    }
+  }
+  // Masukkan gambar/video di kursor; teks yang sedang dipilih tak diganti
+  const insert = (content) => {
+    if (!alive) return;
     const { selection } = editor.state;
     const chain = editor.chain().focus();
     if (!selection.node && !selection.empty) chain.setTextSelection(selection.to);
-    chain.setImage({ src, alt: '' }).run();
+    chain.insertContent(content).run();
+    // Blok baru kekal terpilih; tanpa ni, taipan seterusnya akan ganti video/gambar tadi
+    const { selection: sel, doc } = editor.state;
+    if (sel.node) {
+      const chain2 = editor.chain();
+      if (!doc.resolve(sel.to).nodeAfter?.isTextblock) chain2.insertContentAt(sel.to, { type: 'paragraph' });
+      chain2.setTextSelection(sel.to + 1).run();
+    }
   };
+  const insertImage = (src) => insert({ type: 'image', attrs: { src, alt: '' } });
+  const insertVideo = ({ url, poster, width, height }) => insert({ type: 'video', attrs: { src: url, poster, width, height } });
   function uploadFrom(files) {
-    const imgs = [...(files || [])].filter((f) => f.type.startsWith('image/'));
-    if (!imgs.length) return false;
+    const list = [...(files || [])].filter((f) => /^(image|video)\//.test(f.type));
+    if (!list.length) return false;
     (async () => {
-      for (const f of imgs) {
-        try { insertImage(await upload(f)); } catch (e) { toast(esc(e.message), 'err'); }
+      for (const f of list) {
+        try {
+          if (f.type.startsWith('video/')) insertVideo(await uploadVideo(f));
+          else insertImage(await upload(f));
+        } catch (e) { toast(esc(e.message), 'err'); }
       }
     })();
     return true;
   }
+  function pick(target, accept) {
+    fileEl.dataset.target = target;
+    fileEl.accept = accept;
+    fileEl.click();
+  }
   fileEl.addEventListener('change', async () => {
     const f = fileEl.files[0];
+    const target = fileEl.dataset.target;
     fileEl.value = '';
     if (!f) return;
     try {
+      if (target === 'video') { insertVideo(await uploadVideo(f)); return; }
       const url = await upload(f);
-      if (fileEl.dataset.target === 'cover') { queue({ image: url }); d.image = url; d.og_auto = false; renderCover(); }
+      if (target === 'cover') { queue({ image: url }); d.image = url; d.og_auto = false; renderCover(); }
       else insertImage(url);
     } catch (e) { toast(esc(e.message), 'err'); }
   });
@@ -414,7 +490,7 @@ async function editorView(id) {
     $('#cover-rm').hidden = auto;
   }
   renderCover();
-  $('#cover-up').addEventListener('click', () => { fileEl.dataset.target = 'cover'; fileEl.click(); });
+  $('#cover-up').addEventListener('click', () => pick('cover', 'image/*'));
   $('#cover-rm').addEventListener('click', () => { d.image = ''; queue({ image: '' }); renderCover(); });
   $('#meta').addEventListener('focusout', () => { if (!d.image || d.og_auto) flush().then(renderCover); });
 
@@ -500,8 +576,9 @@ async function editorView(id) {
   cleanup = async () => {
     await flush();
     // Draf baru yang ditinggalkan kosong tak perlu disimpan
-    const empty = !d.path && !d.title.trim() && !editor.getText().trim() && !/<img/.test(editor.getHTML());
+    const empty = !d.path && !d.title.trim() && !editor.getText().trim() && !/<(img|video|iframe)\b/.test(editor.getHTML());
     if (empty) await api(`/api/drafts/${id}`, { method: 'DELETE' }).catch(() => {});
+    alive = false;
     removeEventListener('beforeunload', beforeUnload);
     vv?.removeEventListener('resize', place);
     vv?.removeEventListener('scroll', place);
@@ -563,7 +640,54 @@ function setBadge(n) {
   b.hidden = !n;
 }
 
+// ---------- Statistik ----------
+
+async function statistikView() {
+  view.innerHTML = '<section class="page"><h1 class="page__title">Statistik</h1><p class="empty mono">Memuat...</p></section>';
+  const s = await api('/api/statistik');
+  const tahun = new Date().toLocaleString('en', { timeZone: 'Asia/Kuala_Lumpur', year: 'numeric' });
+  const tile = (label, value, sub = '') => `
+    <div class="stat"><span class="stat__label mono">${label}</span><span class="stat__value">${value}</span>${sub ? `<span class="stat__sub mono">${sub}</span>` : ''}</div>`;
+  const l = s.lawatan;
+  const lawatan = l ? `
+      <h2 class="label mono">Lawatan korokk.com</h2>
+      <table class="stats">
+        <thead><tr><th></th><th class="mono">Sepanjang masa</th><th class="mono">7 hari lepas</th><th class="mono">Tahun ${tahun}</th></tr></thead>
+        <tbody>
+          <tr><th class="mono">Page view</th><td>${nombor(l.semua.views)}</td><td>${nombor(l.minggu.views)}</td><td>${nombor(l.tahun.views)}</td></tr>
+          <tr><th class="mono">Pelawat</th><td>${nombor(l.semua.pelawat)}</td><td>${nombor(l.minggu.pelawat)}</td><td>${nombor(l.tahun.pelawat)}</td></tr>
+        </tbody>
+      </table>
+      <p class="hint">Lawatan dari browser yang pernah buka Studio tak dikira. Untuk peranti lain, buka <a href="${esc(me.site)}/?abai=1" target="_blank" rel="noopener">${esc(me.site.replace(/^https?:\/\//, ''))}/?abai=1</a> sekali.</p>`
+    : `<h2 class="label mono">Lawatan korokk.com</h2><p class="empty">${esc(s.ralat || 'Tiada data.')}</p>`;
+  const komen = s.komen
+    ? tile('Komen nama sahaja', nombor(s.komen.lulus), s.komen.menunggu ? `+ ${nombor(s.komen.menunggu)} menunggu` : '')
+    : tile('Komen nama sahaja', '–');
+  view.innerHTML = `
+    <section class="page">
+      <h1 class="page__title">Statistik</h1>
+      ${lawatan}
+      <h2 class="label mono">Kandungan</h2>
+      <div class="stat-grid">
+        ${tile('Post terbit', nombor(s.post.terbit), s.post.draf ? `${nombor(s.post.draf)} draf` : '')}
+        ${komen}
+        ${tile('Komen GitHub', s.giscus === null ? '–' : nombor(s.giscus), s.giscus === null ? 'token perlu Discussions: Read' : '')}
+      </div>
+      ${s.popular?.length ? `
+      <h2 class="label mono">Paling dibaca</h2>
+      <table class="stats stats--list">
+        <thead><tr><th class="mono">Post</th><th class="mono">Page view</th><th class="mono">Pelawat</th></tr></thead>
+        <tbody>${s.popular.map((p) => `<tr><th><a href="${esc(me.site + p.path)}" target="_blank" rel="noopener">${esc(p.title)}</a></th><td>${nombor(p.views)}</td><td>${nombor(p.pelawat)}</td></tr>`).join('')}</tbody>
+      </table>` : ''}
+    </section>`;
+}
+
 // ---------- Mula ----------
+
+// Browser yang buka Studio tak dikira dalam statistik laman (lihat main.js dalam repo laman)
+if (/(^|\.)korokk\.com$/.test(location.hostname)) {
+  document.cookie = 'korok_abai=1; domain=korokk.com; path=/; secure; samesite=lax; max-age=315360000';
+}
 
 (async () => {
   try {

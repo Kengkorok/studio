@@ -83,3 +83,28 @@ export async function commit({ message, files = [], deletes = [] }) {
     }
   }
 }
+
+// Bilangan komen giscus (GitHub Discussions), termasuk balasan.
+// Perlukan permission Discussions: Read pada token; null kalau tiada akses.
+export async function discussionComments() {
+  const [owner, name] = REPO.split('/');
+  const query = `query($owner: String!, $name: String!, $after: String) {
+    repository(owner: $owner, name: $name) {
+      discussions(first: 100, after: $after) {
+        nodes { comments(first: 100) { totalCount nodes { replies { totalCount } } } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }`;
+  let total = 0;
+  let after = null;
+  for (let page = 0; page < 20; page++) {
+    const r = await gh('/graphql', { method: 'POST', body: JSON.stringify({ query, variables: { owner, name, after } }) });
+    const d = r.data?.repository?.discussions;
+    if (r.errors?.length || !d) return null;
+    for (const n of d.nodes) total += n.comments.totalCount + n.comments.nodes.reduce((s, c) => s + c.replies.totalCount, 0);
+    if (!d.pageInfo.hasNextPage) break;
+    after = d.pageInfo.endCursor;
+  }
+  return total;
+}

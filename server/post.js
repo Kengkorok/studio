@@ -71,7 +71,7 @@ export function postUrl(d) {
 // Kemaskan HTML editor supaya senang dibaca dalam mod </> dan dalam git diff
 export function prettyHtml(html) {
   return String(html || '')
-    .replace(/>\s*(<(?:p|h[1-6]|ul|ol|li|blockquote|pre|hr|figure|img|table|thead|tbody|tr|div)\b)/g, '>\n$1')
+    .replace(/>\s*(<(?:p|h[1-6]|ul|ol|li|blockquote|pre|hr|figure|img|video|table|thead|tbody|tr|div)\b)/g, '>\n$1')
     .replace(/(<\/(?:ul|ol|blockquote|table|thead|tbody|figure|div)>)/g, '\n$1')
     .replace(/\n{2,}/g, '\n')
     .trim();

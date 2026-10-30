@@ -4,13 +4,17 @@ import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { bodyLimit } from 'hono/body-limit';
 import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { Readable, Transform } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { join, dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
-import { listPosts, readFile as readRepoFile, commit, repoInfo } from './github.js';
+import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
 import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml } from './post.js';
 import { toWebp, ogCard } from './images.js';
+import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
 
 const SITE = (process.env.SITE_URL || 'https://korokk.com').replace(/\/$/, '');
@@ -24,6 +28,29 @@ const tarikh = (iso) => { const [y, m, d] = iso.split('-'); return `${d} ${BULAN
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ID_RE = /^[0-9a-f-]{36}$/;
 const FILE_RE = /^[a-z0-9][a-z0-9._-]{0,120}$/;
+const TYPES = { webp: 'image/webp', png: 'image/png', mp4: 'video/mp4' };
+const hasMedia = (html) => /<(img|video|iframe)\b/.test(html);
+
+// Hantar fail dengan sokongan Range (Safari tak main video tanpanya)
+async function sendFile(c, file, headers = {}) {
+  const { size } = await stat(file);
+  const type = TYPES[file.split('.').pop()] || 'application/octet-stream';
+  const m = /^bytes=(\d*)-(\d*)$/.exec(c.req.header('Range') || '');
+  let start = 0;
+  let end = size - 1;
+  if (m && (m[1] || m[2])) {
+    if (m[1]) { start = Number(m[1]); if (m[2]) end = Math.min(Number(m[2]), end); } else start = Math.max(0, size - Number(m[2]));
+    if (start > end) return c.body(null, 416, { 'Content-Range': `bytes */${size}` });
+  }
+  const partial = start > 0 || end < size - 1;
+  return c.body(Readable.toWeb(createReadStream(file, { start, end })), partial ? 206 : 200, {
+    'Content-Type': type,
+    'Content-Length': String(end - start + 1),
+    'Accept-Ranges': 'bytes',
+    ...(partial ? { 'Content-Range': `bytes ${start}-${end}/${size}` } : {}),
+    ...headers,
+  });
+}
 
 const app = new Hono();
 
@@ -143,12 +170,68 @@ app.post('/api/drafts/:id/images', bodyLimit({ maxSize: 25 * 1024 * 1024 }), asy
   return c.json({ url: `/uploads/${id}/${name}`, size: webp.length });
 });
 
+// ---------- Video ----------
+// Dihantar dalam cebisan sebab Cloudflare hadkan 100MB setiap permintaan.
+// Cebisan terakhir (end=1) mula tukar di belakang; klien tanya status sampai siap.
+const VIDEO_MAX = 1024 ** 3;
+const jobs = new Map(); // up -> { id, status: 'proses' | 'siap' | 'gagal', result, ralat }
+
+app.post('/api/drafts/:id/video', async (c) => {
+  const id = c.req.param('id');
+  const up = c.req.query('up') || '';
+  if (!ID_RE.test(id) || !getDraft(id)) return c.json({ ralat: 'Draf tiada' }, 404);
+  if (!ID_RE.test(up) || jobs.has(up) || !c.req.raw.body) return c.json({ ralat: 'Upload tak sah' }, 400);
+  const dir = join(UPLOADS, id);
+  const tmp = join(dir, `.up-${up}`);
+  await mkdir(dir, { recursive: true });
+  const have = await stat(tmp).then((s) => s.size, () => 0);
+  if (Number(c.req.query('offset')) !== have) return c.json({ ralat: 'Cebisan video tak ikut turutan. Cuba upload semula.' }, 409);
+
+  let total = have;
+  const limit = new Transform({
+    transform(chunk, _enc, cb) {
+      total += chunk.length;
+      cb(total > VIDEO_MAX ? Object.assign(new Error('Video melebihi 1GB.'), { status: 413 }) : null, chunk);
+    },
+  });
+  try {
+    await pipeline(Readable.fromWeb(c.req.raw.body), limit, createWriteStream(tmp, { flags: 'a' }));
+  } catch (e) {
+    await rm(tmp, { force: true });
+    throw e;
+  }
+  if (c.req.query('end') !== '1') return c.json({ offset: total });
+
+  const base = slugify(String(c.req.query('name') || '').replace(/\.[^.]+$/, '')).slice(0, 40) || 'video';
+  const name = `${base}-${randomBytes(3).toString('hex')}`;
+  jobs.set(up, { id, status: 'proses' });
+  toMp4(tmp, join(dir, `${name}.mp4`))
+    .then(async ({ poster, width, height, size }) => {
+      await writeFile(join(dir, `${name}.webp`), poster);
+      jobs.set(up, { id, status: 'siap', result: { url: `/uploads/${id}/${name}.mp4`, poster: `/uploads/${id}/${name}.webp`, width, height, size } });
+    })
+    .catch(async (e) => {
+      console.error(e);
+      await rm(join(dir, `${name}.mp4`), { force: true });
+      jobs.set(up, { id, status: 'gagal', ralat: e.status ? e.message : 'Video tak dapat diproses.' });
+    })
+    .finally(() => rm(tmp, { force: true }));
+  return c.json({ status: 'proses' }, 202);
+});
+
+app.get('/api/drafts/:id/video/:up', (c) => {
+  const up = c.req.param('up');
+  const job = jobs.get(up);
+  if (!job || job.id !== c.req.param('id')) return c.json({ ralat: 'Upload tiada' }, 404);
+  if (job.status !== 'proses') jobs.delete(up);
+  return c.json(job);
+});
+
 app.get('/uploads/:id/:file', async (c) => {
   const { id, file } = c.req.param();
   if (!ID_RE.test(id) || !FILE_RE.test(file)) return c.notFound();
   try {
-    const buf = await readFile(join(UPLOADS, id, file));
-    return c.body(buf, 200, { 'Content-Type': 'image/webp', 'Cache-Control': 'private, max-age=31536000, immutable' });
+    return await sendFile(c, join(UPLOADS, id, file), { 'Cache-Control': 'private, max-age=31536000, immutable' });
   } catch { return c.notFound(); }
 });
 
@@ -156,11 +239,8 @@ app.get('/uploads/:id/:file', async (c) => {
 app.get('/assets/*', async (c) => {
   const rel = decodeURIComponent(c.req.path.slice('/assets/'.length));
   if (rel.split('/').some((p) => !p || p === '..' || p.startsWith('.'))) return c.notFound();
-  const local = join(ASSETS, rel);
   try {
-    await stat(local);
-    const type = local.endsWith('.png') ? 'image/png' : local.endsWith('.webp') ? 'image/webp' : 'application/octet-stream';
-    return c.body(await readFile(local), 200, { 'Content-Type': type });
+    return await sendFile(c, join(ASSETS, rel));
   } catch {
     return c.redirect(`${SITE}/assets/${rel}`);
   }
@@ -181,7 +261,7 @@ app.post('/api/drafts/:id/publish', async (c) => {
   if (!d.title.trim()) return c.json({ ralat: 'Isi tajuk dulu.' }, 400);
   if (!d.slug) return c.json({ ralat: 'Slug kosong.' }, 400);
   if (!DATE_RE.test(d.date)) return c.json({ ralat: 'Tarikh tak sah.' }, 400);
-  if (!d.body.replace(/<[^>]+>/g, '').trim() && !/<img/.test(d.body)) return c.json({ ralat: 'Isi post masih kosong.' }, 400);
+  if (!d.body.replace(/<[^>]+>/g, '').trim() && !hasMedia(d.body)) return c.json({ ralat: 'Isi post masih kosong.' }, 400);
 
   const newPath = postPath(d);
   if (newPath !== d.path) {
@@ -193,7 +273,7 @@ app.post('/api/drafts/:id/publish', async (c) => {
   const files = [];
   const seen = new Set();
   const rewrite = async (s) => {
-    const re = new RegExp(`/uploads/${d.id}/([a-z0-9][a-z0-9._-]*\\.webp)`, 'g');
+    const re = new RegExp(`/uploads/${d.id}/([a-z0-9][a-z0-9._-]*\\.(?:webp|mp4))`, 'g');
     for (const [, name] of s.matchAll(re)) {
       if (seen.has(name)) continue;
       seen.add(name);
@@ -288,6 +368,26 @@ async function komen(path, init = {}) {
 app.get('/api/komen', async (c) => c.json(await komen(`/komen?status=${c.req.query('status') === 'lulus' ? 'lulus' : 'menunggu'}`)));
 app.post('/api/komen/:id/lulus', async (c) => c.json(await komen(`/komen/${Number(c.req.param('id'))}/lulus`, { method: 'POST' })));
 app.delete('/api/komen/:id', async (c) => c.json(await komen(`/komen/${Number(c.req.param('id'))}`, { method: 'DELETE' })));
+
+// ---------- Statistik ----------
+
+app.get('/api/statistik', async (c) => {
+  const [files, index, worker, giscus] = await Promise.all([
+    listPosts(),
+    fetch(`${SITE}/blog/search.json`).then((r) => (r.ok ? r.json() : [])).catch(() => []),
+    KOMEN_API ? komen('/statistik').catch((e) => ({ ralat: e.message })) : { ralat: 'KOMEN_API belum diset dalam .env Studio.' },
+    discussionComments().catch(() => null),
+  ]);
+  const titles = new Map(index.map((p) => [p.url, p.title]));
+  const livePaths = new Set(files.filter((f) => parsePath(f.path)).map((f) => f.path));
+  const drafts = listDrafts().filter((d) => !d.path || !livePaths.has(d.path)).length;
+  return c.json({
+    post: { terbit: livePaths.size, draf: drafts },
+    ...worker,
+    popular: worker.popular?.map((p) => ({ ...p, title: titles.get(p.path) || p.path })),
+    giscus,
+  });
+});
 
 // ---------- Aplikasi ----------
 

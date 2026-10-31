@@ -22,6 +22,7 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.
 - **Moderasi komen:** luluskan atau padam komen "nama sahaja" dari Worker `komen`.
+- **Penulis agent AI:** Kloudrok (Claude) dan korokGPT (ChatGPT) boleh hantar draf melalui API. Draf masuk dengan lencana penulis dan kau terbit sendiri. Lihat [Agent](#agent).
 - **Statistik:** page view dan pelawat (sepanjang masa, 7 hari lepas, tahun ini), post paling dibaca, bilangan post dan komen.
   - Dikira oleh `main.js` di laman (`/hit` pada Worker `komen`, jadual `lawatan` dalam D1).
   - Browser yang buka Studio dapat cookie `korok_abai` pada `.korokk.com` dan tak dikira. Peranti lain: buka `korokk.com/?abai=1` sekali (`?abai=0` untuk batal).
@@ -74,6 +75,46 @@ Port hanya dibuka di `127.0.0.1:8460`, jadi Studio tak boleh dicapai dari LAN at
 | `ACCESS_EMAILS` | | Senarai email dibenarkan (koma). Lapisan kedua selepas polisi Access |
 | `KOMEN_API` | | URL Worker komen, contoh `https://komen.sa7one.workers.dev` |
 | `KOMEN_ADMIN_TOKEN` | | `ADMIN_TOKEN` Worker komen |
+| `AGENT_TOKENS` | | `kloudrok:token,korokgpt:token`. Token untuk agent AI |
+| `NOTIFY_WEBHOOK` | | Webhook Discord untuk notifikasi draf baru dari agent |
+| `STUDIO_URL` | | Default `https://studio.korokk.com`. Dipakai dalam link yang dipulangkan kepada agent |
+
+## Agent
+
+Agent AI hantar draf ke `/api/agent/*` dengan header `Authorization: Bearer <token>`. Token menentukan nama penulis, jadi agent tak boleh menyamar. Agent hanya boleh buat, baca dan ubah draf sendiri yang belum terbit. Terbit tetap dibuat dalam Studio.
+
+| Laluan | Guna |
+| --- | --- |
+| `GET /api/agent/saya` | Semak token: nama penulis |
+| `GET /api/agent/gaya` | Panduan gaya tulisan (Markdown) |
+| `GET /api/agent/tags` | Tag sedia ada dan bilangan post |
+| `POST /api/agent/drafts` | Buat draf baru |
+| `GET /api/agent/drafts/:id` | Baca draf sendiri |
+| `PUT /api/agent/drafts/:id` | Ubah draf sendiri (sebelum terbit) |
+
+Contoh badan `POST /api/agent/drafts`:
+
+```json
+{
+  "title": "Event Pokémon GO Hujung Minggu Ni",
+  "description": "Satu ayat ringkasan, maksimum 200 aksara.",
+  "markdown": "Aku baru terbaca...\n\n## Apa yang ada?\n\n- ...",
+  "tags": ["pokemon-go", "teknologi"],
+  "sumber": { "url": "https://pokemongolive.com/...", "title": "Pokémon GO Live" },
+  "cover": { "dari_sumber": true, "alt": "Terangkan gambar", "kredit": "Gambar: Niantic" }
+}
+```
+
+- **Isi:** `markdown` atau `html`. Skrip, iframe, pengendali event dan link `javascript:` dibuang.
+- **Tag:** disatukan dengan tag sedia ada yang ejaannya hampir sama (technology → teknologi). Maksimum 8.
+- **Cover:** satu daripada yang berikut. Kalau gambar gagal diambil, draf guna kad OG auto dan jawapan ada `amaran`.
+  - `{ "url": "https://..." }`
+  - `{ "dari_sumber": true }`: og:image halaman sumber
+  - `{ "base64": "..." }`: gambar AI
+  - `{ "auto": true }`: kad OG auto
+- **Gambar dari internet:** hanya `https` ke alamat awam, maksimum 15MB.
+
+Panduan gaya ada dalam [`agent/gaya-tulisan.md`](agent/gaya-tulisan.md). Untuk ubah tanpa bina semula container, salin ke `data/gaya-tulisan.md` dan sunting salinan tu.
 
 ## Macam mana post disimpan
 

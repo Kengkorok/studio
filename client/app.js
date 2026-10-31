@@ -5,6 +5,7 @@ import Image from '@tiptap/extension-image';
 import Youtube from '@tiptap/extension-youtube';
 import BubbleMenu from '@tiptap/extension-bubble-menu';
 import { Placeholder } from '@tiptap/extensions';
+import { TAG_MAX, tagSlug, tagMirip } from '../shared/tags.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const view = $('#view');
@@ -51,26 +52,6 @@ function toast(msg, kind = '') {
 }
 
 // ---------- Tag: cadangan dari tag yang pernah diguna ----------
-
-const TAG_MAX = 8; // sama dengan had di server
-const tagSlug = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
-// Bentuk "bunyi" supaya ejaan BM/Inggeris dan typo biasa jadi sama: technology, tecnologi -> teknologi
-const tagBunyi = (s) => tagSlug(s).replace(/-/g, '').replace(/tion/g, 'si').replace(/ph/g, 'f')
-  .replace(/([bcdgkpstw])h/g, '$1').replace(/[cq]/g, 'k').replace(/x/g, 'ks').replace(/y$/, 'i').replace(/(.)\1+/g, '$1');
-function jarak(a, b) {
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const cur = [i];
-    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
-    prev = cur;
-  }
-  return prev[b.length];
-}
-const tagMirip = (a, b) => {
-  const x = tagBunyi(a), y = tagBunyi(b), len = Math.max(x.length, y.length);
-  return x === y || jarak(x, y) <= (len >= 8 ? 2 : len >= 5 ? 1 : 0);
-};
 
 let knownTags = null;
 function tagField(root, initial, onChange) {
@@ -219,6 +200,9 @@ addEventListener('hashchange', route);
 
 // ---------- Senarai tulisan ----------
 
+// Penulis selain Safwan (sama dengan _data/penulis.yml di repo blog)
+const PENULIS = { kloudrok: 'Kloudrok', korokgpt: 'korokGPT' };
+
 async function listView() {
   view.innerHTML = '<section class="page"><p class="empty mono">Memuat...</p></section>';
   const { live, drafts } = await api('/api/posts');
@@ -227,7 +211,7 @@ async function listView() {
       <button class="row__main" type="button" data-${kind === 'live' ? 'path' : 'id'}="${esc(kind === 'live' ? p.path : p.id)}">
         <span class="row__date mono">${esc(tarikh(p.date))}</span>
         <span class="row__title">${esc(p.title || 'Tanpa tajuk')}</span>
-        <span class="row__meta mono">${kind === 'live'
+        <span class="row__meta mono">${PENULIS[p.author] ? `<span class="pill pill--ai">${PENULIS[p.author]}</span> ` : ''}${kind === 'live'
           ? (p.dirty ? '<span class="pill pill--gold">ada perubahan belum terbit</span>' : '<span class="pill pill--green">live</span>')
           : `<span class="pill">draf</span> disimpan ${esc(jam(p.updated_at))}`}</span>
       </button>
@@ -310,6 +294,15 @@ async function editorView(id) {
             <label class="field"><span class="mono">Tarikh</span><input class="input" type="date" id="date" value="${esc(d.date)}"></label>
             <label class="field"><span class="mono">Ringkasan</span><textarea class="input" id="desc" rows="3" maxlength="200" placeholder="Satu ayat. Keluar bawah tajuk dan dalam pratonton WhatsApp.">${esc(d.description)}</textarea></label>
             <div class="field"><label class="mono" for="tag-input">Tag</label><div class="tags" id="tags"></div></div>
+            <label class="field"><span class="mono">Penulis</span><select class="input" id="author">
+              ${[['safwan', 'Safwan'], ...Object.entries(PENULIS)].map(([k, n]) => `<option value="${k}" ${d.author === k ? 'selected' : ''}>${n}${k === 'safwan' ? '' : ' (AI) · disemak Safwan'}</option>`).join('')}
+            </select></label>
+          </div>
+          <div class="meta__group">
+            <span class="mono field__label">Sumber</span>
+            <input class="input" id="sumber-url" type="url" value="${esc(d.sumber_url)}" placeholder="https://… link artikel asal">
+            <input class="input" id="sumber-title" value="${esc(d.sumber_title)}" placeholder="Nama sumber, contoh: Pokémon GO Live">
+            <p class="hint">Keluar sebagai kotak "Sumber" di hujung post. Kosongkan kalau tiada.</p>
           </div>
           <div class="meta__group">
             <span class="mono field__label">Cover &amp; imej pratonton</span>
@@ -319,6 +312,7 @@ async function editorView(id) {
               <button class="btn btn--sm btn--ghost" type="button" id="cover-rm">Buang</button>
             </div>
             <label class="field"><span class="mono">Teks alt cover</span><input class="input" id="alt" value="${esc(d.image_alt)}" placeholder="Terangkan gambar"></label>
+            <label class="field"><span class="mono">Kredit gambar</span><input class="input" id="credit" value="${esc(d.image_credit)}" placeholder="Gambar: Niantic"></label>
             <label class="check"><input type="checkbox" id="show-cover" ${d.cover ? 'checked' : ''}> Papar cover atas post</label>
             <p class="hint">Tanpa cover, Studio jana kad bertajuk secara automatik untuk pratonton link.</p>
           </div>
@@ -591,6 +585,10 @@ async function editorView(id) {
   $('#desc').addEventListener('input', (e) => queue({ description: e.target.value.replace(/\n/g, ' ') }));
   tagField($('#tags'), d.tags, (tags) => queue({ tags }));
   $('#alt').addEventListener('input', (e) => queue({ image_alt: e.target.value }));
+  $('#credit').addEventListener('input', (e) => queue({ image_credit: e.target.value }));
+  $('#author').addEventListener('change', (e) => queue({ author: e.target.value }));
+  $('#sumber-url').addEventListener('change', (e) => queue({ sumber_url: e.target.value }));
+  $('#sumber-title').addEventListener('input', (e) => queue({ sumber_title: e.target.value }));
   $('#show-cover').addEventListener('change', (e) => queue({ cover: e.target.checked }));
   $('#komen').addEventListener('change', (e) => queue({ komen: e.target.checked }));
 

@@ -32,7 +32,16 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS drafts_path ON drafts(path) WHERE path IS NOT NULL;
 `);
 
-const FIELDS = ['path', 'title', 'slug', 'slug_locked', 'date', 'description', 'tags', 'image', 'image_alt', 'cover', 'komen', 'og_auto', 'body', 'dirty', 'published_at'];
+// Lajur yang ditambah selepas versi pertama
+const cols = new Set(db.prepare('PRAGMA table_info(drafts)').all().map((c) => c.name));
+for (const [name, def] of [
+  ['author', "TEXT NOT NULL DEFAULT 'safwan'"], // safwan, kloudrok atau korokgpt
+  ['sumber_url', "TEXT NOT NULL DEFAULT ''"],
+  ['sumber_title', "TEXT NOT NULL DEFAULT ''"],
+  ['image_credit', "TEXT NOT NULL DEFAULT ''"],
+]) if (!cols.has(name)) db.exec(`ALTER TABLE drafts ADD COLUMN ${name} ${def}`);
+
+const FIELDS = ['path', 'title', 'slug', 'slug_locked', 'date', 'description', 'tags', 'image', 'image_alt', 'cover', 'komen', 'og_auto', 'body', 'dirty', 'published_at', 'author', 'sumber_url', 'sumber_title', 'image_credit'];
 const now = () => new Date().toISOString();
 
 function decode(row) {
@@ -59,7 +68,7 @@ function encode(d) {
 }
 
 export function listDrafts() {
-  return db.prepare('SELECT id, path, title, slug, date, tags, dirty, updated_at, published_at FROM drafts ORDER BY updated_at DESC')
+  return db.prepare('SELECT id, path, title, slug, date, tags, dirty, author, updated_at, published_at FROM drafts ORDER BY updated_at DESC')
     .all().map(decode);
 }
 

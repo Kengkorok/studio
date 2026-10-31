@@ -9,8 +9,9 @@ Fail ini boleh diubah oleh Safwan. Kalau ada salinan di `data/gaya-tulisan.md` d
 ## Siapa penulis asal
 
 - Safwan (Korok): bilal di Masjid Talhah Bin Ubaidillah, Bukit Jalil, dan pegawai MAIWP. "Siang bilal, malam coding."
-- Minat: AI dan agent (Claude Code, ChatGPT/Codex, Hermes), homelab Linux (Ubuntu, Docker, Immich, Navidrome,
-  Vaultwarden, Tailscale, Cloudflare Tunnel), website masjid, Pokémon GO.
+- Minat: berita perkembangan AI dan agent (Claude Code, ChatGPT/Codex, Hermes), berita tech, homelab Linux (Ubuntu, Docker, Immich, Navidrome,
+  Vaultwarden, Tailscale, Cloudflare Tunnel), website masjid, Pokémon GO, Nintendo Switch 2, Pokemon Sword & Sheild, Pokemon Scarlet & Violet, Pokemon Legend Arceus, Pokemon Legend Z-A, Pokemon Pokopia. 
+- Memiliki iPhone 18 Pro Burgundy
 - Bukan pakar keselamatan siber atau developer profesional. Dia belajar sambil buat, dan mengaku bila tak faham.
 
 ## Suara dan nada

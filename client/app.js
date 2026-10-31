@@ -50,6 +50,119 @@ function toast(msg, kind = '') {
   toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'err' ? 7000 : 4000);
 }
 
+// ---------- Tag: cadangan dari tag yang pernah diguna ----------
+
+const TAG_MAX = 8; // sama dengan had di server
+const tagSlug = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
+// Bentuk "bunyi" supaya ejaan BM/Inggeris dan typo biasa jadi sama: technology, tecnologi -> teknologi
+const tagBunyi = (s) => tagSlug(s).replace(/-/g, '').replace(/tion/g, 'si').replace(/ph/g, 'f')
+  .replace(/([bcdgkpstw])h/g, '$1').replace(/[cq]/g, 'k').replace(/x/g, 'ks').replace(/y$/, 'i').replace(/(.)\1+/g, '$1');
+function jarak(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+const tagMirip = (a, b) => {
+  const x = tagBunyi(a), y = tagBunyi(b), len = Math.max(x.length, y.length);
+  return x === y || jarak(x, y) <= (len >= 8 ? 2 : len >= 5 ? 1 : 0);
+};
+
+let knownTags = null;
+function tagField(root, initial, onChange) {
+  let tags = [...initial];
+  let items = [];
+  let active = 0;
+  root.innerHTML = `<div class="tags__box"><span class="tags__chips"></span><input id="tag-input" class="tags__input" autocomplete="off" spellcheck="false" placeholder="Taip tag..." role="combobox" aria-controls="tag-menu" aria-expanded="false"></div>
+    <div class="tags__menu" id="tag-menu" role="listbox" hidden></div><p class="hint tags__hint" hidden></p>`;
+  const chips = root.querySelector('.tags__chips'), input = root.querySelector('input');
+  const menu = root.querySelector('.tags__menu'), hint = root.querySelector('.tags__hint');
+  // Ambil semula setiap kali editor dibuka supaya tag dari post yang baru terbit ikut sekali
+  const load = api('/api/tags').then((t) => (knownTags = t)).catch(() => (knownTags = knownTags || []));
+  load.then(() => { if (document.activeElement === input) render(); });
+
+  const drawChips = () => {
+    chips.innerHTML = tags.map((t, i) => `<span class="tag">#${esc(t)}<button type="button" data-i="${i}" aria-label="Buang tag ${esc(t)}">×</button></span>`).join('');
+    input.hidden = tags.length >= TAG_MAX;
+  };
+  const commit = (t) => {
+    hint.hidden = true;
+    input.value = '';
+    if (t && !tags.includes(t) && tags.length < TAG_MAX) { tags.push(t); drawChips(); onChange([...tags]); }
+    if (document.activeElement === input) render(); else close();
+  };
+  const close = () => { menu.hidden = true; input.setAttribute('aria-expanded', 'false'); };
+
+  // Senarai: padanan tepat, ejaan hampir sama, bermula dengan, mengandungi; tambah baru di bawah
+  function render() {
+    const q = tagSlug(input.value);
+    const pool = (knownTags || []).filter((k) => !tags.includes(k.tag));
+    items = [];
+    if (!q) {
+      items = pool.slice(0, 8).map((k) => ({ ...k, kind: 'ada' }));
+    } else {
+      const rank = (k) => (k.tag === q ? 0 : tagMirip(k.tag, q) ? 1 : k.tag.startsWith(q) ? 2 : k.tag.includes(q) ? 3 : 9);
+      items = pool.map((k) => ({ ...k, r: rank(k) })).filter((k) => k.r < 9)
+        .sort((a, b) => a.r - b.r || b.n - a.n).slice(0, 6).map((k) => ({ ...k, kind: k.r === 1 ? 'mirip' : 'ada' }));
+      if (!items.some((k) => k.tag === q) && !tags.includes(q)) items.push({ tag: q, kind: 'baru', mirip: items.some((k) => k.kind === 'mirip') });
+    }
+    // Pilihan lalai: tag sedia ada yang sama, hampir sama atau bermula dengan apa yang ditaip; kalau tiada, tag baru
+    const best = items.findIndex((k) => k.kind !== 'baru' && (k.tag === q || k.kind === 'mirip' || (q.length >= 2 && k.tag.startsWith(q))));
+    active = !q ? -1 : best >= 0 ? best : items.findIndex((k) => k.kind === 'baru');
+    menu.innerHTML = items.map((k, i) => `<button type="button" class="tags__opt${i === active ? ' is-active' : ''}" role="option" data-i="${i}" aria-selected="${i === active}">
+      <span class="tags__name">#${esc(k.tag)}</span><span class="mono muted">${k.kind === 'baru' ? (k.mirip ? '+ baru, ada mirip' : '+ tag baru') : `${k.kind === 'mirip' ? 'mirip · ' : ''}${k.n ? `${k.n} post` : 'draf'}`}</span></button>`).join('');
+    menu.hidden = !items.length;
+    input.setAttribute('aria-expanded', String(!menu.hidden));
+  }
+  const pick = (i) => { if (items[i]) commit(items[i].tag); };
+  const move = (step) => {
+    if (!items.length) return;
+    active = (active + step + items.length) % items.length;
+    menu.querySelectorAll('.tags__opt').forEach((b, i) => { b.classList.toggle('is-active', i === active); b.setAttribute('aria-selected', String(i === active)); });
+    menu.children[active]?.scrollIntoView({ block: 'nearest' });
+  };
+
+  input.addEventListener('input', () => { hint.hidden = true; render(); });
+  input.addEventListener('focus', render);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); move(1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+    else if (e.key === 'Escape') close();
+    else if (e.key === 'Enter' || e.key === ',' || (e.key === 'Tab' && input.value.trim())) {
+      if (!input.value.trim() && active < 0) return;
+      e.preventDefault();
+      pick(active >= 0 ? active : items.findIndex((k) => k.kind === 'baru'));
+    } else if (e.key === 'Backspace' && !input.value && tags.length) {
+      tags.pop(); drawChips(); onChange([...tags]); render();
+    }
+  });
+  // Keluar dari kotak: tag yang ditaip ditambah terus kecuali ada ejaan hampir sama yang perlu dipilih
+  input.addEventListener('blur', () => setTimeout(() => {
+    if (root.contains(document.activeElement)) return;
+    close();
+    const q = tagSlug(input.value);
+    if (!q) return;
+    const sama = (knownTags || []).find((k) => k.tag !== q && tagMirip(k.tag, q));
+    if (sama && !tags.includes(sama.tag)) {
+      hint.textContent = `"${q}" belum ditambah. Maksud kau #${sama.tag}? Tekan Enter dalam kotak tag untuk pilih.`;
+      hint.hidden = false;
+    } else commit(q);
+  }, 150));
+  menu.addEventListener('mousedown', (e) => e.preventDefault());
+  menu.addEventListener('click', (e) => { const b = e.target.closest('.tags__opt'); if (b) { pick(Number(b.dataset.i)); input.focus(); } });
+  chips.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-i]');
+    if (!b) return;
+    tags.splice(Number(b.dataset.i), 1); drawChips(); onChange([...tags]); input.focus();
+  });
+  root.querySelector('.tags__box').addEventListener('click', (e) => { if (e.target === e.currentTarget) input.focus(); });
+  drawChips();
+}
+
 // Dialog ringkas: pengesahan atau satu input
 function ask({ title, text = '', input, ok = 'OK', danger = false }) {
   const dlg = $('#dlg');
@@ -196,7 +309,7 @@ async function editorView(id) {
               <span class="slug"><span class="mono muted">/blog/</span><input class="input" id="slug" value="${esc(d.slug)}" ${d.path ? 'title="Tukar slug akan tukar URL post"' : ''}></span></label>
             <label class="field"><span class="mono">Tarikh</span><input class="input" type="date" id="date" value="${esc(d.date)}"></label>
             <label class="field"><span class="mono">Ringkasan</span><textarea class="input" id="desc" rows="3" maxlength="200" placeholder="Satu ayat. Keluar bawah tajuk dan dalam pratonton WhatsApp.">${esc(d.description)}</textarea></label>
-            <label class="field"><span class="mono">Tag</span><input class="input" id="tags" value="${esc(d.tags.join(', '))}" placeholder="homelab, masjid, kod"></label>
+            <div class="field"><label class="mono" for="tag-input">Tag</label><div class="tags" id="tags"></div></div>
           </div>
           <div class="meta__group">
             <span class="mono field__label">Cover &amp; imej pratonton</span>
@@ -476,7 +589,7 @@ async function editorView(id) {
   $('#slug').addEventListener('change', (e) => queue({ slug: e.target.value }));
   $('#date').addEventListener('change', (e) => queue({ date: e.target.value }));
   $('#desc').addEventListener('input', (e) => queue({ description: e.target.value.replace(/\n/g, ' ') }));
-  $('#tags').addEventListener('change', (e) => queue({ tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) }));
+  tagField($('#tags'), d.tags, (tags) => queue({ tags }));
   $('#alt').addEventListener('input', (e) => queue({ image_alt: e.target.value }));
   $('#show-cover').addEventListener('change', (e) => queue({ cover: e.target.checked }));
   $('#komen').addEventListener('change', (e) => queue({ komen: e.target.checked }));

@@ -101,9 +101,18 @@ app.get('/api/posts', async (c) => {
   return c.json({ live, drafts: unpublished });
 });
 
+// Tag yang pernah diguna: dari post yang dah terbit (search.json laman) dan draf dalam Studio
+app.get('/api/tags', async (c) => {
+  const index = await fetch(`${SITE}/blog/search.json`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  const count = new Map();
+  for (const p of index) for (const t of p.tags || []) count.set(t, (count.get(t) || 0) + 1);
+  for (const d of listDrafts()) for (const t of d.tags || []) if (!count.has(t)) count.set(t, 0);
+  return c.json([...count].map(([tag, n]) => ({ tag, n })).sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag)));
+});
+
 // ---------- Draf ----------
 
-app.post('/api/drafts', (c) => c.json(createDraft({ date: todayKL() })));
+app.post('/api/drafts',(c) => c.json(createDraft({ date: todayKL() })));
 
 // Buka post yang dah terbit untuk disunting
 app.post('/api/posts/open', async (c) => {

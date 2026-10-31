@@ -202,7 +202,29 @@ button { font: inherit; color: inherit; }
 .meta__group:last-child { border-bottom: 0; }
 .meta__danger { justify-items: start; }
 .field { display: grid; gap: 6px; }
-.field > span:first-child, .field__label { color: var(--muted); }
+.field > span:first-child, .field > label:first-child, .field__label { color: var(--muted); }
+
+/* Tag: cip + cadangan dari tag yang pernah diguna */
+.tags__box {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; min-height: 40px;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); cursor: text;
+}
+.tags__box:focus-within { border-color: var(--ink); background: var(--raised); }
+.tags__chips { display: contents; }
+.tag { display: inline-flex; align-items: center; gap: 2px; padding: 3px 4px 3px 10px; border-radius: 999px; background: var(--line); font: 12px/1.3 var(--mono); }
+.tag button { width: 20px; height: 20px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 15px; line-height: 1; cursor: pointer; }
+.tag button:hover { background: var(--ink); color: var(--bg); }
+.tags__input { flex: 1 1 90px; min-width: 90px; padding: 4px; border: 0; outline: none; background: none; color: var(--ink); font: 14px/1.4 var(--sans); }
+.tags__menu { display: grid; margin-top: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 12px; background: var(--raised); max-height: 240px; overflow-y: auto; }
+.tags__opt {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 8px 10px;
+  border: 0; border-radius: 8px; background: none; color: var(--ink); font: 14px/1.3 var(--sans); text-align: left; cursor: pointer;
+}
+.tags__name { min-width: 0; overflow-wrap: anywhere; }
+.tags__opt .mono { flex: none; font-size: 11px; white-space: nowrap; }
+.tags__opt:hover, .tags__opt.is-active { background: var(--surface); }
+.tags__opt.is-active { box-shadow: inset 2px 0 0 var(--accent); }
+.tags__hint { margin: 6px 0 0; color: var(--danger); }
 .slug { display: flex; align-items: center; gap: 4px; }
 .check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .check input { width: 16px; height: 16px; accent-color: var(--accent); }

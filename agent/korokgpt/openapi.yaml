@@ -1,0 +1,137 @@
+# Skema Action untuk Custom GPT "korokGPT". Tampal dalam GPT > Configure > Actions > Schema.
+# Auth: API Key, jenis Bearer, nilai = token korokgpt dari AGENT_TOKENS.
+openapi: 3.1.0
+info:
+  title: Studio korokk.com (agent)
+  description: Hantar draf post blog korokk.com untuk disemak Safwan. Agent tak boleh terbit.
+  version: 1.0.0
+servers:
+  - url: https://studio.korokk.com/api/agent
+components:
+  securitySchemes:
+    token:
+      type: http
+      scheme: bearer
+  schemas:
+    Sumber:
+      type: object
+      properties:
+        url: { type: string, description: Link artikel atau halaman sumber (https) }
+        title: { type: string, description: Nama laman atau tajuk artikel sumber }
+    Cover:
+      type: object
+      description: >
+        Pilih satu: dari_sumber (og:image link sumber), url (link gambar https), atau auto (kad OG Studio).
+        Untuk gambar AI yang dijana dalam perbualan, jangan guna medan ni untuk gambar; hantar openaiFileIdRefs.
+      properties:
+        dari_sumber: { type: boolean }
+        url: { type: string }
+        auto: { type: boolean }
+        alt: { type: string, description: Terangkan gambar dalam satu ayat BM }
+        kredit: { type: string, description: 'Contoh "Gambar: Niantic" atau "Gambar: dijana AI"' }
+    Draf:
+      type: object
+      properties:
+        title: { type: string, description: Tajuk post, maksimum ~80 aksara }
+        description: { type: string, description: Ringkasan 1-2 ayat, maksimum 200 aksara }
+        markdown: { type: string, description: Isi post dalam Markdown, tanpa tajuk "#", tanpa senarai tag atau Sumber }
+        tags:
+          type: array
+          items: { type: string }
+          description: 3-5 tag huruf kecil, utamakan tag sedia ada
+        sumber: { $ref: '#/components/schemas/Sumber' }
+        cover: { $ref: '#/components/schemas/Cover' }
+        openaiFileIdRefs:
+          type: array
+          items: { type: string }
+          description: Gambar dari perbualan (contohnya gambar AI yang baru dijana) untuk dijadikan cover. Satu gambar sahaja.
+    Jawapan:
+      type: object
+      properties:
+        id: { type: string }
+        author: { type: string }
+        title: { type: string }
+        slug: { type: string }
+        tags: { type: array, items: { type: string } }
+        image: { type: [string, 'null'] }
+        studio: { type: string, description: Link untuk Safwan sunting dan terbit }
+        pratonton: { type: string, description: Link pratonton draf }
+        terbit: { type: [string, 'null'] }
+        amaran: { type: array, items: { type: string } }
+security:
+  - token: []
+paths:
+  /panduan:
+    get:
+      operationId: ambilPanduan
+      summary: Panduan gaya tulisan Safwan, senarai tag sedia ada dan identiti penulis. Panggil sebelum menulis setiap post.
+      x-openai-isConsequential: false
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  saya: { type: object, properties: { author: { type: string }, nama: { type: string } } }
+                  gaya: { type: string, description: Panduan gaya dalam Markdown }
+                  tags:
+                    type: array
+                    items: { type: object, properties: { tag: { type: string }, n: { type: integer } } }
+  /drafts:
+    post:
+      operationId: buatDraf
+      summary: Buat draf baru dalam Studio. Draf tidak diterbit; Safwan semak dan terbit sendiri.
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/Draf'
+                - required: [title, markdown]
+      responses:
+        '201':
+          description: Draf dibuat
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Jawapan' }
+  /drafts/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: bacaDraf
+      summary: Baca draf korokGPT yang sedia ada
+      x-openai-isConsequential: false
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Jawapan'
+                  - type: object
+                    properties:
+                      description: { type: string }
+                      body: { type: string, description: Isi draf dalam HTML }
+    put:
+      operationId: ubahDraf
+      summary: Ubah draf korokGPT yang belum diterbit. Hantar medan yang berubah sahaja.
+      x-openai-isConsequential: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Draf' }
+      responses:
+        '200':
+          description: Draf dikemas kini
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Jawapan' }

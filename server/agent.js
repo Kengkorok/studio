@@ -90,23 +90,37 @@ const clip = (s, n) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 export function agentRoutes({ knownTags, uploads, site, studioUrl }) {
   const app = new Hono();
 
+  // Laluan ni terbuka di Cloudflare (Bypass) untuk korokGPT, jadi IP yang banyak salah token disekat sekejap
+  const gagal = new Map();
   app.use('*', async (c, next) => {
+    const ip = c.req.header('CF-Connecting-IP') || 'local';
+    const now = Date.now();
+    const g = gagal.get(ip);
+    if (g && g.n >= 10 && now - g.t < 15 * 60 * 1000) return c.json({ ralat: 'Terlalu banyak cubaan. Cuba lagi nanti.' }, 429);
     const author = whoIs((c.req.header('Authorization') || '').replace(/^Bearer\s+/i, '').trim());
-    if (!author) return c.json({ ralat: 'Token agent tak sah' }, 401);
+    if (!author) {
+      gagal.set(ip, { n: g && now - g.t < 15 * 60 * 1000 ? g.n + 1 : 1, t: now });
+      return c.json({ ralat: 'Token agent tak sah' }, 401);
+    }
+    gagal.delete(ip);
     c.set('author', author);
     return next();
   });
 
-  app.get('/saya', (c) => c.json({ author: c.get('author'), nama: NAMA[c.get('author')], site, studio: studioUrl }));
+  const saya = (c) => ({ author: c.get('author'), nama: NAMA[c.get('author')], site, studio: studioUrl });
+  app.get('/saya', (c) => c.json(saya(c)));
 
   // Panduan gaya: fail dalam DATA_DIR boleh diubah tanpa bina semula container
-  app.get('/gaya', async (c) => {
+  const gaya = () => {
     const own = join(DATA_DIR, 'gaya-tulisan.md');
-    const text = await readFile(existsSync(own) ? own : join(process.cwd(), 'agent', 'gaya-tulisan.md'), 'utf8');
-    return c.body(text, 200, { 'Content-Type': 'text/markdown; charset=utf-8' });
-  });
+    return readFile(existsSync(own) ? own : join(process.cwd(), 'agent', 'gaya-tulisan.md'), 'utf8');
+  };
+  app.get('/gaya', async (c) => c.body(await gaya(), 200, { 'Content-Type': 'text/markdown; charset=utf-8' }));
 
   app.get('/tags', async (c) => c.json(await knownTags()));
+
+  // Semua yang agent perlu sebelum menulis, dalam satu panggilan JSON (GPT Action lebih suka JSON)
+  app.get('/panduan', async (c) => c.json({ saya: saya(c), gaya: await gaya(), tags: await knownTags() }));
 
   async function saveCover(id, cover) {
     let buf;
@@ -117,7 +131,8 @@ export function agentRoutes({ knownTags, uploads, site, studioUrl }) {
       from = cover.url || (cover.dari_sumber && cover.sumber_url ? await ogImage(cover.sumber_url) : null);
       if (!from) throw new Error('Halaman sumber tiada og:image');
       const r = await safeFetch(from, { max: 15 * 1024 * 1024, accept: 'image/*' });
-      if (!/^image\//.test(r.type)) throw new Error('Link cover bukan gambar');
+      // Fail ChatGPT kadang-kadang datang sebagai octet-stream; jenisnya dah diberi dalam openaiFileIdRefs
+      if (!/^image\//.test(r.type) && !cover.gambar_ai) throw new Error('Link cover bukan gambar');
       buf = r.buf;
     }
     const webp = await toWebp(buf);
@@ -141,8 +156,14 @@ export function agentRoutes({ knownTags, uploads, site, studioUrl }) {
   }
 
   async function applyCover(id, b, f) {
-    if (!b.cover) return null;
+    // GPT Action hantar gambar dari perbualan (contohnya gambar yang dijana) sebagai openaiFileIdRefs:
+    // [{ name, id, mime_type, download_link }], link sah 5 minit
+    const ref = Array.isArray(b.openaiFileIdRefs)
+      ? b.openaiFileIdRefs.find((r) => r?.download_link && (!r.mime_type || /^image\//.test(r.mime_type)))
+      : null;
+    if (!b.cover && !ref) return null;
     const cover = { ...b.cover, sumber_url: f.sumber_url || b.sumber?.url };
+    if (ref) Object.assign(cover, { url: ref.download_link, gambar_ai: true, auto: false, dari_sumber: false, kredit: cover.kredit || 'Gambar: dijana AI' });
     if (cover.auto) { Object.assign(f, { image: '', image_alt: '', image_credit: '', og_auto: false }); return null; }
     try {
       const saved = await saveCover(id, cover);

@@ -88,6 +88,7 @@ Agent AI hantar draf ke `/api/agent/*` dengan header `Authorization: Bearer <tok
 | `GET /api/agent/saya` | Semak token: nama penulis |
 | `GET /api/agent/gaya` | Panduan gaya tulisan (Markdown) |
 | `GET /api/agent/tags` | Tag sedia ada dan bilangan post |
+| `GET /api/agent/panduan` | `saya`, `gaya` dan `tags` dalam satu JSON (untuk GPT Action) |
 | `POST /api/agent/drafts` | Buat draf baru |
 | `GET /api/agent/drafts/:id` | Baca draf sendiri |
 | `PUT /api/agent/drafts/:id` | Ubah draf sendiri (sebelum terbit) |
@@ -111,8 +112,13 @@ Contoh badan `POST /api/agent/drafts`:
   - `{ "url": "https://..." }`
   - `{ "dari_sumber": true }`: og:image halaman sumber
   - `{ "base64": "..." }`: gambar AI
+  - `openaiFileIdRefs` (medan atas, dari GPT Action): gambar dari perbualan ChatGPT, kredit lalai "Gambar: dijana AI"
   - `{ "auto": true }`: kad OG auto
 - **Gambar dari internet:** hanya `https` ke alamat awam, maksimum 15MB.
+- **Token salah:** 10 cubaan gagal dari satu IP dalam 15 minit disekat sementara (429).
+
+**Claudrok** guna skill Claude Code di mesin homelab dan panggil `127.0.0.1:8460` terus.
+**korokGPT** ialah Custom GPT dengan Action ke `https://studio.korokk.com/api/agent`. Skema dan arahannya ada dalam [`agent/korokgpt/`](agent/korokgpt/). Laluan `/api/agent` perlu dibuka (Bypass) di Cloudflare Access; laluan Studio lain kekal dikunci.
 
 Panduan gaya ada dalam [`agent/gaya-tulisan.md`](agent/gaya-tulisan.md). Untuk ubah tanpa bina semula container, salin ke `data/gaya-tulisan.md` dan sunting salinan tu.
 

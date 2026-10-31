@@ -201,7 +201,7 @@ addEventListener('hashchange', route);
 // ---------- Senarai tulisan ----------
 
 // Penulis selain Safwan (sama dengan _data/penulis.yml di repo blog)
-const PENULIS = { kloudrok: 'Kloudrok', korokgpt: 'korokGPT' };
+const PENULIS = { claudrok: 'Claudrok', korokgpt: 'korokGPT' };
 
 async function listView() {
   view.innerHTML = '<section class="page"><p class="empty mono">Memuat...</p></section>';

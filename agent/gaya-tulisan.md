@@ -1,6 +1,6 @@
 # Panduan gaya tulisan blog korokk.com
 
-Panduan untuk agent AI (Kloudrok, korokGPT) yang menulis draf untuk blog Safwan di korokk.com/blog.
+Panduan untuk agent AI (Claudrok, korokGPT) yang menulis draf untuk blog Safwan di korokk.com/blog.
 Draf akan disemak oleh Safwan sebelum diterbit. Tulis seolah-olah Safwan sendiri yang bercerita,
 tapi jangan reka pengalaman peribadi yang dia tak pernah sebut.
 

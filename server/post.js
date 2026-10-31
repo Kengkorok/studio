@@ -3,7 +3,7 @@ import YAML from 'yaml';
 import { marked } from 'marked';
 
 // Penulis yang dikenali laman (_data/penulis.yml dalam repo blog)
-export const AUTHORS = ['safwan', 'kloudrok', 'korokgpt'];
+export const AUTHORS = ['safwan', 'claudrok', 'korokgpt'];
 
 const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 

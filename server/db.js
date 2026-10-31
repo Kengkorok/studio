@@ -35,7 +35,7 @@ db.exec(`
 // Lajur yang ditambah selepas versi pertama
 const cols = new Set(db.prepare('PRAGMA table_info(drafts)').all().map((c) => c.name));
 for (const [name, def] of [
-  ['author', "TEXT NOT NULL DEFAULT 'safwan'"], // safwan, kloudrok atau korokgpt
+  ['author', "TEXT NOT NULL DEFAULT 'safwan'"], // safwan, claudrok atau korokgpt
   ['sumber_url', "TEXT NOT NULL DEFAULT ''"],
   ['sumber_title', "TEXT NOT NULL DEFAULT ''"],
   ['image_credit', "TEXT NOT NULL DEFAULT ''"],

@@ -348,7 +348,7 @@ app.get('/preview/:id', (c) => {
   if (!d) return c.notFound();
   const words = d.body.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
   const cover = d.image && d.cover && !d.og_auto ? `<figure class="post__cover"><img src="${esc(d.image)}" alt="${esc(d.image_alt)}">${d.image_credit ? `<figcaption class="post__credit mono muted">${esc(d.image_credit)}</figcaption>` : ''}</figure>` : '';
-  const penulis = { kloudrok: 'Kloudrok', korokgpt: 'korokGPT' }[d.author];
+  const penulis = { claudrok: 'Claudrok', korokgpt: 'korokGPT' }[d.author];
   return c.html(`<!doctype html>
 <html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pratonton: ${esc(d.title)}</title>

@@ -1,4 +1,4 @@
-// Laluan untuk agent AI (Kloudrok = Claude, korokGPT = ChatGPT).
+// Laluan untuk agent AI (Claudrok = Claude, korokGPT = ChatGPT).
 // Agent hanya boleh buat dan ubah draf sendiri; terbit tetap dibuat oleh Safwan dalam Studio.
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -15,9 +15,9 @@ import { slugify, todayKL, prettyHtml } from './post.js';
 import { toWebp } from './images.js';
 import { satukanTag } from '../shared/tags.js';
 
-const NAMA = { kloudrok: 'Kloudrok', korokgpt: 'korokGPT' };
+const NAMA = { claudrok: 'Claudrok', korokgpt: 'korokGPT' };
 
-// AGENT_TOKENS=kloudrok:token1,korokgpt:token2
+// AGENT_TOKENS=claudrok:token1,korokgpt:token2
 const TOKENS = (process.env.AGENT_TOKENS || '').split(',').map((s) => s.trim()).filter(Boolean).map((pair) => {
   const i = pair.indexOf(':');
   return { author: pair.slice(0, i).trim().toLowerCase(), hash: createHash('sha256').update(pair.slice(i + 1).trim()).digest() };

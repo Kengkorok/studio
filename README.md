@@ -22,7 +22,7 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.
 - **Moderasi komen:** luluskan atau padam komen "nama sahaja" dari Worker `komen`.
-- **Penulis agent AI:** Kloudrok (Claude) dan korokGPT (ChatGPT) boleh hantar draf melalui API. Draf masuk dengan lencana penulis dan kau terbit sendiri. Lihat [Agent](#agent).
+- **Penulis agent AI:** Claudrok (Claude) dan korokGPT (ChatGPT) boleh hantar draf melalui API. Draf masuk dengan lencana penulis dan kau terbit sendiri. Lihat [Agent](#agent).
 - **Statistik:** page view dan pelawat (sepanjang masa, 7 hari lepas, tahun ini), post paling dibaca, bilangan post dan komen.
   - Dikira oleh `main.js` di laman (`/hit` pada Worker `komen`, jadual `lawatan` dalam D1).
   - Browser yang buka Studio dapat cookie `korok_abai` pada `.korokk.com` dan tak dikira. Peranti lain: buka `korokk.com/?abai=1` sekali (`?abai=0` untuk batal).
@@ -75,7 +75,7 @@ Port hanya dibuka di `127.0.0.1:8460`, jadi Studio tak boleh dicapai dari LAN at
 | `ACCESS_EMAILS` | | Senarai email dibenarkan (koma). Lapisan kedua selepas polisi Access |
 | `KOMEN_API` | | URL Worker komen, contoh `https://komen.sa7one.workers.dev` |
 | `KOMEN_ADMIN_TOKEN` | | `ADMIN_TOKEN` Worker komen |
-| `AGENT_TOKENS` | | `kloudrok:token,korokgpt:token`. Token untuk agent AI |
+| `AGENT_TOKENS` | | `claudrok:token,korokgpt:token`. Token untuk agent AI |
 | `NOTIFY_WEBHOOK` | | Webhook Discord untuk notifikasi draf baru dari agent |
 | `STUDIO_URL` | | Default `https://studio.korokk.com`. Dipakai dalam link yang dipulangkan kepada agent |
 

@@ -12,12 +12,14 @@ import { randomBytes } from 'node:crypto';
 
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
 import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
-import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml } from './post.js';
+import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml, AUTHORS } from './post.js';
 import { toWebp, ogCard } from './images.js';
 import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
+import { agentRoutes, agentCount } from './agent.js';
 
 const SITE = (process.env.SITE_URL || 'https://korokk.com').replace(/\/$/, '');
+const STUDIO_URL = (process.env.STUDIO_URL || 'https://studio.korokk.com').replace(/\/$/, '');
 const KOMEN_API = (process.env.KOMEN_API || '').replace(/\/$/, '');
 const PORT = Number(process.env.PORT || 8460);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -60,6 +62,19 @@ app.onError((err, c) => {
 });
 
 app.get('/healthz', (c) => c.text('ok'));
+
+// Tag yang pernah diguna: dari post yang dah terbit (search.json laman) dan draf dalam Studio
+async function knownTags() {
+  const index = await fetch(`${SITE}/blog/search.json`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
+  const count = new Map();
+  for (const p of index) for (const t of p.tags || []) count.set(t, (count.get(t) || 0) + 1);
+  for (const d of listDrafts()) for (const t of d.tags || []) if (!count.has(t)) count.set(t, 0);
+  return [...count].map(([tag, n]) => ({ tag, n })).sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag));
+}
+
+// Agent AI guna token sendiri (bukan login Access), jadi didaftar sebelum requireAccess
+app.route('/api/agent', agentRoutes({ knownTags, uploads: UPLOADS, site: SITE, studioUrl: STUDIO_URL }));
+
 app.use('*', requireAccess);
 
 // Elak CSRF: permintaan yang mengubah data mesti datang dari skrip Studio sendiri
@@ -91,6 +106,7 @@ app.get('/api/posts', async (c) => {
       date: info.date,
       title: draft?.title || titles.get(`/blog/${info.slug}/`) || info.slug,
       draftId: draft?.id || null,
+      author: draft?.author || 'safwan',
       dirty: !!draft?.dirty,
       url: `${SITE}/blog/${info.slug}/`,
     };
@@ -101,14 +117,7 @@ app.get('/api/posts', async (c) => {
   return c.json({ live, drafts: unpublished });
 });
 
-// Tag yang pernah diguna: dari post yang dah terbit (search.json laman) dan draf dalam Studio
-app.get('/api/tags', async (c) => {
-  const index = await fetch(`${SITE}/blog/search.json`).then((r) => (r.ok ? r.json() : [])).catch(() => []);
-  const count = new Map();
-  for (const p of index) for (const t of p.tags || []) count.set(t, (count.get(t) || 0) + 1);
-  for (const d of listDrafts()) for (const t of d.tags || []) if (!count.has(t)) count.set(t, 0);
-  return c.json([...count].map(([tag, n]) => ({ tag, n })).sort((a, b) => b.n - a.n || a.tag.localeCompare(b.tag)));
-});
+app.get('/api/tags', async (c) => c.json(await knownTags()));
 
 // ---------- Draf ----------
 
@@ -136,7 +145,9 @@ app.put('/api/drafts/:id', async (c) => {
   if (!d) return c.json({ ralat: 'Draf tiada' }, 404);
   const b = await c.req.json();
   const f = {};
-  for (const k of ['title', 'description', 'image', 'image_alt', 'body']) if (typeof b[k] === 'string') f[k] = b[k];
+  for (const k of ['title', 'description', 'image', 'image_alt', 'image_credit', 'sumber_title', 'body']) if (typeof b[k] === 'string') f[k] = b[k];
+  if (typeof b.sumber_url === 'string') f.sumber_url = /^https?:\/\//.test(b.sumber_url.trim()) ? b.sumber_url.trim() : '';
+  if (AUTHORS.includes(b.author)) f.author = b.author;
   for (const k of ['cover', 'komen']) if (typeof b[k] === 'boolean') f[k] = b[k];
   if (Array.isArray(b.tags)) f.tags = [...new Set(b.tags.map((t) => slugify(t)).filter(Boolean))].slice(0, 8);
   if (typeof b.date === 'string' && DATE_RE.test(b.date)) f.date = b.date;
@@ -336,7 +347,8 @@ app.get('/preview/:id', (c) => {
   const d = getDraft(c.req.param('id'));
   if (!d) return c.notFound();
   const words = d.body.replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
-  const cover = d.image && d.cover && !d.og_auto ? `<figure class="post__cover"><img src="${esc(d.image)}" alt="${esc(d.image_alt)}"></figure>` : '';
+  const cover = d.image && d.cover && !d.og_auto ? `<figure class="post__cover"><img src="${esc(d.image)}" alt="${esc(d.image_alt)}">${d.image_credit ? `<figcaption class="post__credit mono muted">${esc(d.image_credit)}</figcaption>` : ''}</figure>` : '';
+  const penulis = { kloudrok: 'Kloudrok', korokgpt: 'korokGPT' }[d.author];
   return c.html(`<!doctype html>
 <html lang="ms"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pratonton: ${esc(d.title)}</title>
@@ -350,13 +362,14 @@ app.get('/preview/:id', (c) => {
 <main><article class="post wrap">
   <header class="post__head">
     <span class="post__back mono">← Semua tulisan</span>
-    <p class="post__meta mono muted"><time>${esc(tarikh(d.date))}</time> <span aria-hidden="true">·</span> ${Math.max(1, Math.floor(words / 200))} min baca</p>
+    <p class="post__meta mono muted"><time>${esc(tarikh(d.date))}</time> <span aria-hidden="true">·</span> ${Math.max(1, Math.floor(words / 200))} min baca${penulis ? ` <span aria-hidden="true">·</span> <span class="post__byline">Ditulis oleh <b>${penulis}</b> <span class="post__ai">AI</span> · disemak Safwan</span>` : ''}</p>
     <h1 class="post__title">${esc(d.title || 'Tanpa tajuk')}</h1>
     ${d.description ? `<p class="post__lede">${esc(d.description)}</p>` : ''}
     ${d.tags.length ? `<p class="post__tags mono">${d.tags.map((t) => `<a>#${esc(t)}</a>`).join(' ')}</p>` : ''}
   </header>
   ${cover}
   <div class="prose">${d.body}</div>
+  ${d.sumber_url ? `<aside class="post__sumber"><span class="mono muted">Sumber</span><a href="${esc(d.sumber_url)}" rel="noopener">${esc(d.sumber_title || d.sumber_url)} ↗</a></aside>` : ''}
 </article></main>
 </body></html>`);
 });
@@ -404,5 +417,5 @@ app.use('/*', serveStatic({ root: './public' }));
 app.get('*', serveStatic({ path: './public/index.html' }));
 
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
-  console.log(`Studio jalan di http://${HOST}:${PORT} (auth: ${authMode}, repo: ${repoInfo.repo})`);
+  console.log(`Studio jalan di http://${HOST}:${PORT} (auth: ${authMode}, repo: ${repoInfo.repo}, agent: ${agentCount})`);
 });

@@ -2,6 +2,9 @@
 import YAML from 'yaml';
 import { marked } from 'marked';
 
+// Penulis yang dikenali laman (_data/penulis.yml dalam repo blog)
+export const AUTHORS = ['safwan', 'kloudrok', 'korokgpt'];
+
 const FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 
 export function slugify(s) {
@@ -41,6 +44,10 @@ export function fromFile(path, text) {
     cover: fm.cover !== false,
     komen: fm.komen !== false,
     og_auto: fm.og_auto === true,
+    author: AUTHORS.includes(fm.author) ? fm.author : 'safwan',
+    sumber_url: fm.sumber?.url ? String(fm.sumber.url) : '',
+    sumber_title: fm.sumber?.title ? String(fm.sumber.title) : '',
+    image_credit: fm.image_credit ? String(fm.image_credit) : '',
     body: body.trim(),
   };
 }
@@ -52,7 +59,10 @@ export function toFile(d) {
   if (d.tags?.length) fm.tags = d.tags;
   if (d.image) fm.image = d.image;
   if (d.image && d.image_alt) fm.image_alt = d.image_alt;
+  if (d.image && d.image_credit) fm.image_credit = d.image_credit;
   if (d.image && d.cover === false) fm.cover = false;
+  if (d.author && d.author !== 'safwan') fm.author = d.author;
+  if (d.sumber_url) fm.sumber = { title: d.sumber_title || d.sumber_url, url: d.sumber_url };
   if (d.og_auto) fm.og_auto = true;
   if (d.komen === false) fm.komen = false;
   const yaml = YAML.stringify(fm, { lineWidth: 0, flowCollectionPadding: false }).trimEnd();

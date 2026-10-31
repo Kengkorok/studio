@@ -3,6 +3,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY client ./client
+COPY shared ./shared
 RUN npm run build
 
 FROM node:22-slim
@@ -13,6 +14,8 @@ ENV NODE_ENV=production DATA_DIR=/data HOST=0.0.0.0 PORT=8460 NODE_NO_WARNINGS=1
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY server ./server
+COPY shared ./shared
+COPY agent ./agent
 COPY fonts ./fonts
 COPY --from=build /app/public ./public
 RUN mkdir -p /data && chown node:node /data

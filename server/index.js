@@ -8,7 +8,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { join, dirname } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
 import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
@@ -430,8 +430,20 @@ app.get('/api/statistik', async (c) => {
 
 // ---------- Aplikasi ----------
 
-app.use('/*', serveStatic({ root: './public' }));
-app.get('*', serveStatic({ path: './public/index.html' }));
+// index.html rujuk app.js dan styles.css dengan ?v=<hash>, jadi build baru terus dimuat
+// (tanpa ni browser dan cache Cloudflare boleh terus guna app.js lama)
+const versi = async (f) => createHash('sha256').update(await readFile(join('public', f))).digest('hex').slice(0, 10);
+const INDEX = (await readFile('public/index.html', 'utf8'))
+  .replace('src="/app.js"', `src="/app.js?v=${await versi('app.js')}"`)
+  .replace('href="/styles.css"', `href="/styles.css?v=${await versi('styles.css')}"`);
+const halaman = (c) => c.html(INDEX, 200, { 'Cache-Control': 'no-cache' });
+app.get('/', halaman);
+app.get('/index.html', halaman);
+app.use('/*', serveStatic({
+  root: './public',
+  onFound: (_path, c) => c.header('Cache-Control', c.req.query('v') ? 'private, max-age=31536000, immutable' : 'no-cache'),
+}));
+app.get('*', halaman);
 
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
   console.log(`Studio jalan di http://${HOST}:${PORT} (auth: ${authMode}, repo: ${repoInfo.repo}, agent: ${agentCount})`);

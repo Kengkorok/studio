@@ -28,6 +28,29 @@ const Video = Node.create({
   renderHTML: ({ HTMLAttributes }) => ['video', mergeAttributes(HTMLAttributes, { controls: '', playsinline: '', preload: 'metadata' })],
 });
 
+// Video TikTok: simpan sebagai <div data-tiktok-video="ID"> dengan iframe player rasmi TikTok (tanpa skrip embed.js)
+const TIKTOK_ID = /(?:data-video-id=["']|\/(?:video|v|embed(?:\/v2)?|player\/v1)\/)(\d{8,25})/;
+const tiktokPlayer = (id) => `https://www.tiktok.com/player/v1/${id}?description=1&music_info=1&rel=0`;
+const Tiktok = Node.create({
+  name: 'tiktok',
+  group: 'block',
+  atom: true,
+  draggable: true,
+  addAttributes: () => ({ id: { default: null } }),
+  parseHTML: () => [
+    { tag: 'div[data-tiktok-video]', getAttrs: (el) => ({ id: el.getAttribute('data-tiktok-video') }) },
+    // Kod embed yang disalin dari TikTok (blockquote.tiktok-embed); didahulukan sebelum blockquote biasa
+    { tag: 'blockquote.tiktok-embed', priority: 100, getAttrs: (el) => {
+      const id = el.getAttribute('data-video-id') || TIKTOK_ID.exec(el.getAttribute('cite') || '')?.[1];
+      return id ? { id } : false;
+    } },
+  ],
+  renderHTML: ({ node }) => ['div', { 'data-tiktok-video': node.attrs.id }, ['iframe', {
+    src: tiktokPlayer(node.attrs.id), title: 'Video TikTok', loading: 'lazy',
+    allow: 'encrypted-media; fullscreen; picture-in-picture', allowfullscreen: 'true',
+  }]],
+});
+
 // ---------- Pembantu ----------
 
 async function api(path, { method = 'GET', body, form } = {}) {
@@ -254,6 +277,7 @@ const TOOLS = [
   ['image', '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>', 'Gambar'],
   ['video', '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-3v9l-5-3z"/></svg>', 'Video (upload)'],
   ['youtube', '<svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.2 5 2.8-5 2.8z"/></svg>', 'YouTube'],
+  ['tiktok', '<svg viewBox="0 0 24 24"><path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5M14 3c.4 2.6 2.2 4.4 5 4.6"/></svg>', 'TikTok'],
   ['hr', '<svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg>', 'Garis pemisah'], '|',
   ['html', '&lt;/&gt;', 'Tukar ke HTML'],
 ];
@@ -378,7 +402,7 @@ async function editorView(id) {
   const bubbleText = $('.bubble__text', bubble);
   const bubbleImg = $('.bubble__img', bubble);
   const bubbleAlt = $('#bubble-alt', bubble);
-  const isMedia = (e) => ['image', 'video', 'youtube'].some((n) => e.isActive(n));
+  const isMedia = (e) => ['image', 'video', 'youtube', 'tiktok'].some((n) => e.isActive(n));
   const cmdButtons = [...view.querySelectorAll('.ed [data-cmd]')];
 
   const editor = new Editor({
@@ -392,6 +416,7 @@ async function editorView(id) {
       Image.configure({ HTMLAttributes: { loading: 'lazy' } }),
       Video,
       Youtube.configure({ nocookie: true, width: 640, height: 360 }),
+      Tiktok,
       Placeholder.configure({ placeholder: 'Mula menulis... (tampal atau seret gambar/video terus ke sini)' }),
       BubbleMenu.configure({
         element: bubble,
@@ -457,6 +482,15 @@ async function editorView(id) {
       if (!url) return;
       if (!YOUTUBE_RE.test(url.trim())) { toast('Link YouTube tak sah.', 'err'); return; }
       insert({ type: 'youtube', attrs: { src: url.trim() } });
+    },
+    tiktok: async () => {
+      const input = await ask({ title: 'Masukkan video TikTok', text: 'Tampal link video TikTok, atau kod embed dari butang Embed di TikTok.', input: '', ok: 'Masukkan' });
+      if (!input?.trim()) return;
+      try {
+        const id = TIKTOK_ID.exec(input)?.[1]
+          || (await api(`/api/tiktok?url=${encodeURIComponent(/https?:\/\/\S+/.exec(input)?.[0] || input.trim())}`)).id;
+        insert({ type: 'tiktok', attrs: { id } });
+      } catch (e) { toast(e.message, 'err'); }
     },
     html: toggleHtml,
     alt: async () => {

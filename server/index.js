@@ -119,6 +119,23 @@ app.get('/api/posts', async (c) => {
 
 app.get('/api/tags', async (c) => c.json(await knownTags()));
 
+// Link TikTok -> ID video. Link pendek (vt./vm.tiktok.com) diikut redirect, tapi hanya ke domain tiktok.com
+const TIKTOK_HOST = /(^|\.)tiktok\.com$/;
+app.get('/api/tiktok', async (c) => {
+  let url;
+  try { url = new URL(c.req.query('url') || ''); } catch { return c.json({ ralat: 'Link TikTok tak sah.' }, 400); }
+  for (let hop = 0; hop < 4; hop++) {
+    if (url.protocol !== 'https:' || !TIKTOK_HOST.test(url.hostname)) break;
+    const id = /\/(?:video|v|embed(?:\/v2)?|player\/v1)\/(\d{8,25})/.exec(url.pathname)?.[1];
+    if (id) return c.json({ id });
+    const r = await fetch(url, { method: 'HEAD', redirect: 'manual', signal: AbortSignal.timeout(8000) }).catch(() => null);
+    const next = r?.headers.get('location');
+    if (!next) break;
+    url = new URL(next, url);
+  }
+  return c.json({ ralat: 'Tak jumpa video dalam link tu. Guna link video, contohnya tiktok.com/@nama/video/123…' }, 400);
+});
+
 // ---------- Draf ----------
 
 app.post('/api/drafts',(c) => c.json(createDraft({ date: todayKL() })));

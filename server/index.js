@@ -17,6 +17,7 @@ import { toWebp, ogCard } from './images.js';
 import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
 import { agentRoutes, agentCount } from './agent.js';
+import { mcpRoutes } from './mcp.js';
 
 const SITE = (process.env.SITE_URL || 'https://korokk.com').replace(/\/$/, '');
 const STUDIO_URL = (process.env.STUDIO_URL || 'https://studio.korokk.com').replace(/\/$/, '');
@@ -73,9 +74,17 @@ async function knownTags() {
 }
 
 // Agent AI guna token sendiri (bukan login Access), jadi didaftar sebelum requireAccess
-app.route('/api/agent', agentRoutes({ knownTags, uploads: UPLOADS, site: SITE, studioUrl: STUDIO_URL }));
+const agent = agentRoutes({ knownTags, uploads: UPLOADS, site: SITE, studioUrl: STUDIO_URL });
+app.route('/api/agent', agent);
+
+// Connector MCP claude.ai: /mcp, /oauth/token, /oauth/register dan .well-known terbuka (Bypass di Cloudflare)
+const mcp = mcpRoutes({ agent, studioUrl: STUDIO_URL });
+app.route('/', mcp.app);
 
 app.use('*', requireAccess);
+
+// Halaman "Benarkan" untuk connector: perlu login Access macam Studio
+app.route('/oauth/authorize', mcp.authorize);
 
 // Elak CSRF: permintaan yang mengubah data mesti datang dari skrip Studio sendiri
 app.use('/api/*', async (c, next) => {

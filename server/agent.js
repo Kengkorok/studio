@@ -93,6 +93,8 @@ export function agentRoutes({ knownTags, uploads, site, studioUrl }) {
   // Laluan ni terbuka di Cloudflare (Bypass) untuk korokGPT, jadi IP yang banyak salah token disekat sekejap
   const gagal = new Map();
   app.use('*', async (c, next) => {
+    // Connector MCP panggil laluan ni dalam proses dengan penulis yang dah disahkan melalui OAuth
+    if (c.env?.author && NAMA[c.env.author]) { c.set('author', c.env.author); return next(); }
     const ip = c.req.header('CF-Connecting-IP') || 'local';
     const now = Date.now();
     const g = gagal.get(ip);

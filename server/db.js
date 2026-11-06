@@ -7,7 +7,7 @@ import { join } from 'node:path';
 export const DATA_DIR = process.env.DATA_DIR || join(process.cwd(), 'data');
 mkdirSync(join(DATA_DIR, 'uploads'), { recursive: true });
 
-const db = new DatabaseSync(join(DATA_DIR, 'studio.db'));
+export const db = new DatabaseSync(join(DATA_DIR, 'studio.db'));
 db.exec(`
   PRAGMA journal_mode = WAL;
   CREATE TABLE IF NOT EXISTS drafts (

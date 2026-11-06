@@ -206,13 +206,16 @@ let cleanup = null;
 async function route() {
   if (cleanup) { await cleanup(); cleanup = null; }
   const hash = location.hash.slice(1) || '/';
-  const nav = hash.startsWith('/komen') ? 'komen' : hash.startsWith('/statistik') ? 'statistik' : 'tulisan';
+  const nav = hash.startsWith('/komen') ? 'komen' : hash.startsWith('/statistik') ? 'statistik' : hash.startsWith('/feed') ? 'feed' : 'tulisan';
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('is-on', a.dataset.nav === nav));
+  document.querySelector('.top__nav .is-on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   const m = hash.match(/^\/tulis\/([0-9a-f-]{36})$/);
   try {
     if (m) await editorView(m[1]);
     else if (nav === 'komen') await komenView();
     else if (nav === 'statistik') await statistikView();
+    else if (hash === '/feed/urus') await urusFeedView();
+    else if (nav === 'feed') await feedView();
     else await listView();
   } catch (e) {
     view.innerHTML = `<section class="page"><p class="empty">${esc(e.message)}</p></section>`;
@@ -825,6 +828,224 @@ async function statistikView() {
         <tbody>${s.popular.map((p) => `<tr><th><a href="${esc(me.site + p.path)}" target="_blank" rel="noopener">${esc(p.title)}</a></th><td>${nombor(p.views)}</td><td>${nombor(p.pelawat)}</td></tr>`).join('')}</tbody>
       </table>` : ''}
     </section>`;
+}
+
+// ---------- Feed idea kandungan ----------
+
+const lalu = (iso) => {
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 90) return 'baru tadi';
+  if (s < 3600) return `${Math.round(s / 60)} min lalu`;
+  if (s < 86400) return `${Math.round(s / 3600)} jam lalu`;
+  if (s < 7 * 86400) return `${Math.round(s / 86400)} hari lalu`;
+  return tarikh(new Date(iso).toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' }));
+};
+const JENIS_SUMBER = {
+  rss: { nama: 'RSS', alamat: 'Alamat feed RSS', contoh: 'https://contoh.com/feed' },
+  threads: { nama: 'Threads', alamat: 'Nama pengguna Threads', contoh: '@claudeai atau link profil' },
+  google: { nama: 'Google News', alamat: 'Kata kunci carian', contoh: '"Pokemon Legends Z-A"' },
+  leekduck: { nama: 'Leek Duck', alamat: '', contoh: '' },
+};
+const simpanKat = (v) => { try { localStorage.setItem('studio-feed-kat', v); } catch {} };
+const bacaKat = () => { try { return localStorage.getItem('studio-feed-kat') || ''; } catch { return ''; } };
+
+let feedTimer;
+async function feedView(kat = bacaKat()) {
+  clearTimeout(feedTimer);
+  if (!view.querySelector('.feed-page')) view.innerHTML = '<section class="page"><h1 class="page__title">Feed</h1><p class="empty mono">Memuat...</p></section>';
+  let f = await api(`/api/feed${kat ? `?kategori=${encodeURIComponent(kat)}` : ''}`);
+  if (kat && !f.kategori.some((k) => String(k.id) === kat)) { kat = ''; simpanKat(''); f = await api('/api/feed'); }
+  const jumlah = f.kategori.reduce((n, k) => n + k.n, 0);
+  const banner = [
+    f.ai_ralat ? `<p class="banner banner--err">⚠ ${esc(f.ai_ralat)}</p>` : '',
+    f.sumber_ralat.length ? `<p class="banner banner--warn">⚠ ${f.sumber_ralat.length} sumber gagal dibaca: ${f.sumber_ralat.map((s) => esc(s.nama)).join(', ')}. <a href="#/feed/urus">Lihat sebab</a></p>` : '',
+  ].join('');
+  const status = f.jalan ? 'Sedang dikemas kini...' : f.akhir_at ? `Dikemas kini ${lalu(f.akhir_at)}` : 'Belum dikemas kini';
+  view.innerHTML = `
+    <section class="page feed-page">
+      <div class="page__head">
+        <h1 class="page__title">Feed</h1>
+        <div class="feed__tools">
+          <span class="mono muted">${status}${f.menunggu ? ` · ${nombor(f.menunggu)} sedang diterjemah` : ''}</span>
+          <button class="btn btn--sm btn--ghost" id="feed-muat" type="button" ${f.jalan ? 'disabled' : ''}>Muat semula</button>
+          <a class="btn btn--sm btn--ghost" href="#/feed/urus">Urus sumber</a>
+        </div>
+      </div>
+      ${banner}
+      <div class="chips" role="tablist" aria-label="Kategori">
+        <button type="button" role="tab" class="chip" data-kat="" aria-selected="${!kat}">Semua <span class="chip__n">${nombor(jumlah)}</span></button>
+        ${f.kategori.map((k) => `<button type="button" role="tab" class="chip" data-kat="${k.id}" aria-selected="${String(k.id) === kat}">${esc(k.nama)} <span class="chip__n">${nombor(k.n)}</span></button>`).join('')}
+      </div>
+      ${f.item.length ? `<ol class="feed">${f.item.map((i) => `
+        <li class="feed__item">
+          <a class="feed__title" href="${esc(i.url)}" target="_blank" rel="noopener" title="${esc(i.tajuk_asal)}">${esc(i.tajuk)}<span class="feed__ext" aria-hidden="true"> ↗</span></a>
+          ${i.ringkasan ? `<p class="feed__sum">${esc(i.ringkasan)}</p>` : ''}
+          <p class="feed__meta mono">${esc(i.sumber)}${kat ? '' : ` · ${esc(i.kategori)}`} · <time datetime="${esc(i.terbit_at)}">${lalu(i.terbit_at)}</time></p>
+        </li>`).join('')}</ol>`
+        : `<p class="empty">${f.jalan || f.menunggu ? 'Berita sedang ditarik dan diterjemah. Tunggu sekejap...' : 'Tiada berita lagi untuk kategori ini.'}</p>`}
+    </section>`;
+  view.querySelectorAll('[data-kat]').forEach((b) => b.addEventListener('click', () => { simpanKat(b.dataset.kat); feedView(b.dataset.kat); }));
+  $('#feed-muat').addEventListener('click', async () => {
+    await api('/api/feed/muat', { method: 'POST' }).catch((e) => toast(esc(e.message), 'err'));
+    feedView(kat);
+  });
+  // Semasa pusingan berjalan atau masih ada yang belum diterjemah, muat semula sendiri
+  if (f.jalan || f.menunggu) {
+    feedTimer = setTimeout(() => { if (location.hash === '#/feed') feedView(kat).catch(() => {}); }, 8000);
+    cleanup = () => clearTimeout(feedTimer);
+  }
+}
+
+async function urusFeedView() {
+  const data = await api('/api/feed/sumber');
+  view.innerHTML = `
+    <section class="page">
+      <a class="back mono" href="#/feed">← Feed</a>
+      <div class="page__head">
+        <h1 class="page__title">Urus sumber</h1>
+        <button class="btn btn--sm btn--ink" id="kat-baru" type="button">+ Kategori baru</button>
+      </div>
+      <p class="hint">Feed ditarik setiap 30 minit. Tajuk diterjemah ke BM dan diringkaskan oleh Claude Haiku. "Tapisan" memberitahu Claude berita jenis apa yang diambil dari sumber itu; "buang" terus menolak berita yang ada kata kunci tersebut.</p>
+      ${data.map((k) => `
+        <div class="src-kat" data-k="${k.id}">
+          <div class="src-kat__head">
+            <h2 class="src-kat__title">${esc(k.nama)}</h2>
+            <div class="src-kat__act">
+              <button class="btn btn--sm btn--ghost" data-act="tambah" type="button">+ Sumber</button>
+              <button class="btn btn--sm btn--ghost" data-act="nama" type="button">Tukar nama</button>
+              <button class="btn btn--sm btn--ghost btn--danger-text" data-act="padam-kat" type="button">Padam</button>
+            </div>
+          </div>
+          <div class="src-form-slot"></div>
+          ${k.sumber.length ? `<ul class="src">${k.sumber.map((s) => `
+            <li class="src__item ${s.aktif ? '' : 'is-off'}" data-s="${s.id}">
+              <div class="src__main">
+                <p class="src__name">${esc(s.nama)} <span class="pill">${JENIS_SUMBER[s.jenis]?.nama || esc(s.jenis)}</span></p>
+                ${s.alamat ? `<p class="src__addr mono">${esc(s.alamat)}</p>` : ''}
+                ${s.tapis ? `<p class="src__note">Tapisan: ${esc(s.tapis)}</p>` : ''}
+                ${s.buang ? `<p class="src__note">Buang: ${esc(s.buang)}</p>` : ''}
+                <p class="src__state mono ${s.ralat ? 'is-err' : ''}">${s.ralat ? `⚠ ${esc(s.ralat)}` : s.semak_at ? `✓ dibaca ${lalu(s.semak_at)}` : 'belum dibaca'}</p>
+              </div>
+              <div class="src__act">
+                <label class="switch mono"><input type="checkbox" data-act="aktif" ${s.aktif ? 'checked' : ''}> Aktif</label>
+                <button class="btn btn--sm btn--ghost" data-act="sunting" type="button">Sunting</button>
+                <button class="btn btn--sm btn--ghost btn--danger-text" data-act="padam" type="button">Padam</button>
+              </div>
+            </li>`).join('')}</ul>` : '<p class="empty">Belum ada sumber.</p>'}
+        </div>`).join('')}
+    </section>`;
+
+  const semula = () => urusFeedView();
+  $('#kat-baru').addEventListener('click', async () => {
+    const nama = await ask({ title: 'Kategori baru', input: '', ok: 'Tambah' });
+    if (!nama) return;
+    try { await api('/api/feed/kategori', { method: 'POST', body: { nama } }); semula(); } catch (e) { toast(esc(e.message), 'err'); }
+  });
+
+  view.querySelectorAll('[data-k]').forEach((box) => {
+    const kid = Number(box.dataset.k);
+    const kat = data.find((k) => k.id === kid);
+    box.querySelector('[data-act="tambah"]').addEventListener('click', () => sumberForm(box.querySelector('.src-form-slot'), data, { kategori_id: kid, jenis: 'rss' }, semula));
+    box.querySelector('[data-act="nama"]').addEventListener('click', async () => {
+      const nama = await ask({ title: 'Tukar nama kategori', input: kat.nama, ok: 'Simpan' });
+      if (!nama) return;
+      try { await api(`/api/feed/kategori/${kid}`, { method: 'PUT', body: { nama } }); semula(); } catch (e) { toast(esc(e.message), 'err'); }
+    });
+    box.querySelector('[data-act="padam-kat"]').addEventListener('click', async () => {
+      if (!(await ask({ title: `Padam kategori ${kat.nama}?`, text: 'Semua sumber dan berita dalam kategori ini turut dipadam.', ok: 'Padam', danger: true }))) return;
+      try { await api(`/api/feed/kategori/${kid}`, { method: 'DELETE' }); semula(); } catch (e) { toast(esc(e.message), 'err'); }
+    });
+    box.querySelectorAll('[data-s]').forEach((li) => {
+      const s = kat.sumber.find((x) => x.id === Number(li.dataset.s));
+      li.querySelector('[data-act="aktif"]').addEventListener('change', async (e) => {
+        try { await api(`/api/feed/sumber/${s.id}`, { method: 'PUT', body: { aktif: e.target.checked } }); li.classList.toggle('is-off', !e.target.checked); } catch (err) { toast(esc(err.message), 'err'); e.target.checked = !e.target.checked; }
+      });
+      li.querySelector('[data-act="sunting"]').addEventListener('click', () => sumberForm(box.querySelector('.src-form-slot'), data, s, semula));
+      li.querySelector('[data-act="padam"]').addEventListener('click', async () => {
+        if (!(await ask({ title: `Padam ${s.nama}?`, text: 'Berita dari sumber ini turut dibuang dari feed.', ok: 'Padam', danger: true }))) return;
+        try { await api(`/api/feed/sumber/${s.id}`, { method: 'DELETE' }); semula(); } catch (e) { toast(esc(e.message), 'err'); }
+      });
+    });
+  });
+}
+
+function sumberForm(slot, data, s, selesai) {
+  view.querySelectorAll('.src-form-slot').forEach((el) => { el.innerHTML = ''; });
+  const edit = !!s.id;
+  slot.innerHTML = `
+    <form class="src-form">
+      <p class="src-form__title">${edit ? `Sunting ${esc(s.nama)}` : 'Sumber baru'}</p>
+      <div class="src-form__grid">
+        <label class="field"><span class="mono">Jenis</span><select class="input" name="jenis">
+          ${Object.entries(JENIS_SUMBER).map(([k, j]) => `<option value="${k}" ${s.jenis === k ? 'selected' : ''}>${j.nama}</option>`).join('')}
+        </select></label>
+        <label class="field"><span class="mono">Kategori</span><select class="input" name="kategori_id">
+          ${data.map((k) => `<option value="${k.id}" ${k.id === s.kategori_id ? 'selected' : ''}>${esc(k.nama)}</option>`).join('')}
+        </select></label>
+        <label class="field src-form__wide" data-alamat><span class="mono"></span><input class="input" name="alamat" value="${esc(s.alamat || '')}" autocomplete="off"></label>
+        <label class="field src-form__wide"><span class="mono">Nama (pilihan)</span><input class="input" name="nama" value="${esc(s.nama || '')}" placeholder="Diisi sendiri kalau kosong"></label>
+        <label class="field src-form__wide"><span class="mono">Tapisan untuk Claude (pilihan)</span><textarea class="input" name="tapis" rows="2" maxlength="300" placeholder="Contoh: berita iPhone sahaja. Abaikan promosi.">${esc(s.tapis || '')}</textarea></label>
+        <label class="field src-form__wide"><span class="mono">Buang kalau ada kata kunci (pilihan, pisah dengan koma)</span><input class="input" name="buang" value="${esc(s.buang || '')}" placeholder="TCG, Pokémon Unite"></label>
+      </div>
+      <p class="src-form__uji mono" hidden></p>
+      <div class="src-form__act">
+        <button class="btn btn--sm btn--ghost" type="button" data-act="batal">Batal</button>
+        <button class="btn btn--sm btn--ghost" type="button" data-act="uji">Uji</button>
+        <button class="btn btn--sm btn--ink" type="submit">${edit ? 'Simpan' : 'Tambah'}</button>
+      </div>
+    </form>`;
+  const form = slot.querySelector('form');
+  const uji = form.querySelector('.src-form__uji');
+  const jenis = form.elements.jenis;
+  const kemas = () => {
+    const j = JENIS_SUMBER[jenis.value];
+    const box = form.querySelector('[data-alamat]');
+    box.hidden = !j.alamat;
+    box.querySelector('span').textContent = j.alamat;
+    form.elements.alamat.placeholder = j.contoh;
+  };
+  jenis.addEventListener('change', kemas);
+  kemas();
+  const nilai = () => ({
+    jenis: jenis.value,
+    kategori_id: Number(form.elements.kategori_id.value),
+    alamat: form.elements.alamat.value.trim(),
+    nama: form.elements.nama.value.trim(),
+    tapis: form.elements.tapis.value.trim(),
+    buang: form.elements.buang.value.trim(),
+  });
+  form.querySelector('[data-act="batal"]').addEventListener('click', () => { slot.innerHTML = ''; });
+  form.querySelector('[data-act="uji"]').addEventListener('click', async (e) => {
+    e.target.disabled = true;
+    uji.hidden = false;
+    uji.className = 'src-form__uji mono';
+    uji.textContent = 'Membaca sumber...';
+    try {
+      const r = await api('/api/feed/sumber/uji', { method: 'POST', body: nilai() });
+      uji.classList.add('is-ok');
+      uji.innerHTML = `✓ ${nombor(r.n)} item dijumpai.${r.contoh.length ? `<br>${r.contoh.map((t) => `· ${esc(t)}`).join('<br>')}` : ''}`;
+    } catch (err) {
+      uji.classList.add('is-err');
+      uji.textContent = `⚠ ${err.message}`;
+    }
+    e.target.disabled = false;
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('[type="submit"]');
+    btn.disabled = true;
+    try {
+      if (edit) await api(`/api/feed/sumber/${s.id}`, { method: 'PUT', body: nilai() });
+      else await api('/api/feed/sumber', { method: 'POST', body: nilai() });
+      toast(edit ? 'Sumber disimpan.' : 'Sumber ditambah. Berita akan masuk dalam seminit dua.', 'ok');
+      selesai();
+    } catch (err) {
+      toast(esc(err.message), 'err');
+      btn.disabled = false;
+    }
+  });
+  slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  (jenis.value === 'leekduck' ? jenis : form.elements.alamat).focus({ preventScroll: true });
 }
 
 // ---------- Mula ----------

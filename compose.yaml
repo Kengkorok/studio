@@ -5,7 +5,21 @@ services:
     container_name: studio
     restart: unless-stopped
     env_file: .env
+    environment:
+      RSSHUB_URL: http://rsshub:1200
     ports:
       - "127.0.0.1:8460:8460"   # hanya untuk cloudflared di mesin yang sama
     volumes:
       - ./data:/data
+    depends_on:
+      - rsshub
+
+  # Tukar akaun Threads jadi RSS untuk tab Feed. Tiada port didedah: hanya Studio boleh capai.
+  rsshub:
+    image: diygod/rsshub:latest
+    container_name: rsshub
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      CACHE_EXPIRE: 1800
+    mem_limit: 512m

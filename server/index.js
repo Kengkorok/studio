@@ -18,6 +18,7 @@ import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
 import { agentRoutes, agentCount } from './agent.js';
 import { mcpRoutes } from './mcp.js';
+import { feedRoutes, mulaFeed } from './feed.js';
 
 const SITE = (process.env.SITE_URL || 'https://korokk.com').replace(/\/$/, '');
 const STUDIO_URL = (process.env.STUDIO_URL || 'https://studio.korokk.com').replace(/\/$/, '');
@@ -437,6 +438,10 @@ app.get('/api/statistik', async (c) => {
   });
 });
 
+// ---------- Feed idea kandungan ----------
+
+app.route('/api/feed', feedRoutes());
+
 // ---------- Aplikasi ----------
 
 // index.html rujuk app.js dan styles.css dengan ?v=<hash>, jadi build baru terus dimuat
@@ -456,4 +461,5 @@ app.get('*', halaman);
 
 serve({ fetch: app.fetch, port: PORT, hostname: HOST }, () => {
   console.log(`Studio jalan di http://${HOST}:${PORT} (auth: ${authMode}, repo: ${repoInfo.repo}, agent: ${agentCount})`);
+  mulaFeed();
 });

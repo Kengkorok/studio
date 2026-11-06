@@ -12,7 +12,7 @@ import { randomBytes, createHash } from 'node:crypto';
 
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
 import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
-import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml, AUTHORS } from './post.js';
+import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml, AUTHORS, cleanSumber } from './post.js';
 import { toWebp, ogCard } from './images.js';
 import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
@@ -172,8 +172,8 @@ app.put('/api/drafts/:id', async (c) => {
   if (!d) return c.json({ ralat: 'Draf tiada' }, 404);
   const b = await c.req.json();
   const f = {};
-  for (const k of ['title', 'description', 'image', 'image_alt', 'image_credit', 'sumber_title', 'body']) if (typeof b[k] === 'string') f[k] = b[k];
-  if (typeof b.sumber_url === 'string') f.sumber_url = /^https?:\/\//.test(b.sumber_url.trim()) ? b.sumber_url.trim() : '';
+  for (const k of ['title', 'description', 'image', 'image_alt', 'image_credit', 'body']) if (typeof b[k] === 'string') f[k] = b[k];
+  if (Array.isArray(b.sumber)) f.sumber = cleanSumber(b.sumber);
   if (AUTHORS.includes(b.author)) f.author = b.author;
   for (const k of ['cover', 'komen']) if (typeof b[k] === 'boolean') f[k] = b[k];
   if (Array.isArray(b.tags)) f.tags = [...new Set(b.tags.map((t) => slugify(t)).filter(Boolean))].slice(0, 8);
@@ -396,7 +396,7 @@ app.get('/preview/:id', (c) => {
   </header>
   ${cover}
   <div class="prose">${d.body}</div>
-  ${d.sumber_url ? `<aside class="post__sumber"><span class="mono muted">Sumber</span><a href="${esc(d.sumber_url)}" rel="noopener">${esc(d.sumber_title || d.sumber_url)} ↗</a></aside>` : ''}
+  ${d.sumber.length ? `<aside class="post__sumber"><span class="mono muted">Sumber</span>${d.sumber.map((s) => `<a href="${esc(s.url)}" rel="noopener">${esc(s.title || s.url)} ↗</a>`).join('')}</aside>` : ''}
 </article></main>
 </body></html>`);
 });

@@ -53,9 +53,9 @@ const draf = {
   markdown: { type: 'string', description: 'Isi post dalam Markdown, tanpa tajuk "#", tanpa senarai tag atau Sumber' },
   tags: { type: 'array', items: { type: 'string' }, description: '3-5 tag huruf kecil, utamakan tag sedia ada dari panduan' },
   sumber: {
-    type: 'object',
-    properties: { url: { type: 'string' }, title: { type: 'string' } },
-    description: 'Link sumber utama, kalau ada',
+    type: 'array',
+    items: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' } }, required: ['url'] },
+    description: 'Link sumber, sumber utama dulu. Boleh lebih dari satu.',
   },
   cover: {
     type: 'object',

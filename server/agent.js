@@ -11,7 +11,7 @@ import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { marked } from 'marked';
 
 import { DATA_DIR, getDraft, createDraft, updateDraft } from './db.js';
-import { slugify, todayKL, prettyHtml } from './post.js';
+import { slugify, todayKL, prettyHtml, cleanSumber } from './post.js';
 import { toWebp } from './images.js';
 import { satukanTag } from '../shared/tags.js';
 
@@ -152,7 +152,9 @@ export function agentRoutes({ knownTags, uploads, site, studioUrl }) {
     if (b.markdown != null) f.body = prettyHtml(sanitize(marked.parse(String(b.markdown), { gfm: true })));
     else if (b.html != null) f.body = prettyHtml(sanitize(b.html));
     if (Array.isArray(b.tags)) f.tags = satukanTag(b.tags, await knownTags());
-    if (b.sumber?.url && /^https?:\/\//.test(b.sumber.url)) { f.sumber_url = clip(b.sumber.url, 500); f.sumber_title = clip(b.sumber.title || '', 160); }
+    // sumber: satu objek { url, title } atau senarai
+    const sumber = cleanSumber(Array.isArray(b.sumber) ? b.sumber : b.sumber ? [b.sumber] : []);
+    if (sumber.length) f.sumber = sumber;
     if (!d.path && f.title) f.slug = slugify(f.title);
     return f;
   }
@@ -164,7 +166,7 @@ export function agentRoutes({ knownTags, uploads, site, studioUrl }) {
       ? b.openaiFileIdRefs.find((r) => r?.download_link && (!r.mime_type || /^image\//.test(r.mime_type)))
       : null;
     if (!b.cover && !ref) return null;
-    const cover = { ...b.cover, sumber_url: f.sumber_url || b.sumber?.url };
+    const cover = { ...b.cover, sumber_url: f.sumber?.[0]?.url };
     if (ref) Object.assign(cover, { url: ref.download_link, gambar_ai: true, auto: false, dari_sumber: false, kredit: cover.kredit || 'Gambar: dijana AI' });
     if (cover.auto) { Object.assign(f, { image: '', image_alt: '', image_credit: '', og_auto: false }); return null; }
     try {

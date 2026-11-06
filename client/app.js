@@ -327,9 +327,9 @@ async function editorView(id) {
           </div>
           <div class="meta__group">
             <span class="mono field__label">Sumber</span>
-            <input class="input" id="sumber-url" type="url" value="${esc(d.sumber_url)}" placeholder="https://… link artikel asal">
-            <input class="input" id="sumber-title" value="${esc(d.sumber_title)}" placeholder="Nama sumber, contoh: Pokémon GO Live">
-            <p class="hint">Keluar sebagai kotak "Sumber" di hujung post. Kosongkan kalau tiada.</p>
+            <ol class="sumber" id="sumber"></ol>
+            <button class="btn btn--sm btn--ghost sumber__add" type="button" id="sumber-add">+ Tambah sumber</button>
+            <p class="hint">Keluar sebagai kotak "Sumber" di hujung post, ikut turutan ni. Kosongkan kalau tiada.</p>
           </div>
           <div class="meta__group">
             <span class="mono field__label">Cover &amp; imej pratonton</span>
@@ -624,8 +624,36 @@ async function editorView(id) {
   $('#alt').addEventListener('input', (e) => queue({ image_alt: e.target.value }));
   $('#credit').addEventListener('input', (e) => queue({ image_credit: e.target.value }));
   $('#author').addEventListener('change', (e) => queue({ author: e.target.value }));
-  $('#sumber-url').addEventListener('change', (e) => queue({ sumber_url: e.target.value }));
-  $('#sumber-title').addEventListener('input', (e) => queue({ sumber_title: e.target.value }));
+  // Sumber: satu baris (link + nama) setiap sumber, maksimum 10
+  const sumberEl = $('#sumber');
+  const sumberRow = (s = {}) => {
+    const li = document.createElement('li');
+    li.className = 'sumber__row';
+    li.innerHTML = `<input class="input" type="url" data-k="url" placeholder="https://… link artikel asal" aria-label="Link sumber">
+      <input class="input" data-k="title" placeholder="Nama sumber, contoh: Pokémon GO Live" aria-label="Nama sumber">
+      <button class="icon-btn sumber__rm" type="button" aria-label="Buang sumber" title="Buang sumber">×</button>`;
+    $('[data-k="url"]', li).value = s.url || '';
+    $('[data-k="title"]', li).value = s.title || '';
+    sumberEl.append(li);
+    $('#sumber-add').hidden = sumberEl.children.length >= 10;
+    return li;
+  };
+  const saveSumber = () => queue({
+    sumber: [...sumberEl.children]
+      .map((li) => ({ url: $('[data-k="url"]', li).value.trim(), title: $('[data-k="title"]', li).value.trim() }))
+      .filter((s) => s.url),
+  });
+  (d.sumber.length ? d.sumber : [{}]).forEach(sumberRow);
+  sumberEl.addEventListener('input', saveSumber);
+  sumberEl.addEventListener('click', (e) => {
+    const li = e.target.closest('.sumber__rm')?.closest('li');
+    if (!li) return;
+    if (sumberEl.children.length > 1) li.remove();
+    else li.querySelectorAll('input').forEach((i) => { i.value = ''; });
+    $('#sumber-add').hidden = false;
+    saveSumber();
+  });
+  $('#sumber-add').addEventListener('click', () => $('input', sumberRow()).focus());
   $('#show-cover').addEventListener('change', (e) => queue({ cover: e.target.checked }));
   $('#komen').addEventListener('change', (e) => queue({ komen: e.target.checked }));
 

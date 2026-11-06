@@ -45,8 +45,8 @@ export function fromFile(path, text) {
     komen: fm.komen !== false,
     og_auto: fm.og_auto === true,
     author: AUTHORS.includes(fm.author) ? fm.author : 'safwan',
-    sumber_url: fm.sumber?.url ? String(fm.sumber.url) : '',
-    sumber_title: fm.sumber?.title ? String(fm.sumber.title) : '',
+    // Post lama simpan satu objek; sekarang senarai
+    sumber: cleanSumber(Array.isArray(fm.sumber) ? fm.sumber : fm.sumber ? [fm.sumber] : []),
     image_credit: fm.image_credit ? String(fm.image_credit) : '',
     body: body.trim(),
   };
@@ -62,12 +62,20 @@ export function toFile(d) {
   if (d.image && d.image_credit) fm.image_credit = d.image_credit;
   if (d.image && d.cover === false) fm.cover = false;
   if (d.author && d.author !== 'safwan') fm.author = d.author;
-  if (d.sumber_url) fm.sumber = { title: d.sumber_title || d.sumber_url, url: d.sumber_url };
+  if (d.sumber?.length) fm.sumber = d.sumber.map((s) => ({ title: s.title || s.url, url: s.url }));
   if (d.og_auto) fm.og_auto = true;
   if (d.komen === false) fm.komen = false;
   const yaml = YAML.stringify(fm, { lineWidth: 0, flowCollectionPadding: false }).trimEnd();
   // {% raw %} supaya teks macam {{ ini }} dalam post tak diproses oleh Liquid
   return `---\n${yaml}\n---\n{% raw %}\n${d.body.trim()}\n{% endraw %}\n`;
+}
+
+// Senarai sumber: link http(s) sahaja, maksimum 10
+export function cleanSumber(list) {
+  return (Array.isArray(list) ? list : [])
+    .map((s) => ({ url: String(s?.url || '').trim().slice(0, 500), title: String(s?.title || '').trim().slice(0, 160) }))
+    .filter((s) => /^https?:\/\/\S+$/.test(s.url))
+    .slice(0, 10);
 }
 
 export function postPath(d) {

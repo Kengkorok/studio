@@ -333,6 +333,7 @@ async function editorView(id) {
           </div>
           <div class="meta__group">
             <span class="mono field__label">Cover &amp; imej pratonton</span>
+            <p class="hint">Saiz canvas: <b>1200 × 630 px</b> (nisbah 1.91 : 1), atau 2400 × 1260 untuk lebih tajam. Letak tajuk dan muka di tengah, jauhkan 40 px dari tepi atas dan bawah. Elakkan gambar tegak atau segi empat sama, nanti terpotong.</p>
             <div class="cover" id="cover"></div>
             <div class="cover__actions">
               <button class="btn btn--sm" type="button" id="cover-up">Pilih gambar</button>

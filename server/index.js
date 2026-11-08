@@ -13,7 +13,8 @@ import { randomBytes, createHash } from 'node:crypto';
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
 import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
 import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml, AUTHORS, cleanSumber } from './post.js';
-import { toWebp, ogCard } from './images.js';
+import { toWebp, toCoverWebp, ogCard } from './images.js';
+import { IMAGE_MODEL, imagegenOn, promptDari, janaGambar } from './imagegen.js';
 import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
 import { agentRoutes, agentCount } from './agent.js';
@@ -93,7 +94,7 @@ app.use('/api/*', async (c, next) => {
   return next();
 });
 
-app.get('/api/me', (c) => c.json({ email: c.get('email'), repo: repoInfo.repo, site: SITE, komen: !!KOMEN_API, auth: authMode }));
+app.get('/api/me', (c) => c.json({ email: c.get('email'), repo: repoInfo.repo, site: SITE, komen: !!KOMEN_API, auth: authMode, coverAi: imagegenOn() ? IMAGE_MODEL : null }));
 
 // ---------- Senarai post ----------
 
@@ -215,6 +216,29 @@ app.post('/api/drafts/:id/images', bodyLimit({ maxSize: 25 * 1024 * 1024 }), asy
   await mkdir(join(UPLOADS, id), { recursive: true });
   await writeFile(join(UPLOADS, id, name), webp);
   return c.json({ url: `/uploads/${id}/${name}`, size: webp.length });
+});
+
+// Cover AI: prompt lalai dari tajuk dan ringkasan
+app.get('/api/drafts/:id/cover-ai', (c) => {
+  const d = getDraft(c.req.param('id'));
+  if (!d) return c.json({ ralat: 'Draf tiada' }, 404);
+  return c.json({ prompt: promptDari(d), model: IMAGE_MODEL });
+});
+
+app.post('/api/drafts/:id/cover-ai', async (c) => {
+  const id = c.req.param('id');
+  const d = ID_RE.test(id) && getDraft(id);
+  if (!d) return c.json({ ralat: 'Draf tiada' }, 404);
+  const b = await c.req.json().catch(() => ({}));
+  const prompt = (typeof b.prompt === 'string' && b.prompt.trim()) || promptDari(d);
+  const { buf, cost, model } = await janaGambar(prompt);
+  const webp = await toCoverWebp(buf);
+  const name = `cover-ai-${randomBytes(3).toString('hex')}.webp`;
+  await mkdir(join(UPLOADS, id), { recursive: true });
+  await writeFile(join(UPLOADS, id, name), webp);
+  const f = { image: `/uploads/${id}/${name}`, og_auto: false, dirty: true };
+  if (!d.image_credit?.trim()) f.image_credit = 'Gambar: dijana AI';
+  return c.json({ draft: updateDraft(id, f), cost, model, size: webp.length });
 });
 
 // ---------- Video ----------

@@ -28,6 +28,7 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Video panjang: butang YouTube (atau tampal link YouTube terus), embed guna youtube-nocookie.com.
   - TikTok: tampal link video TikTok (termasuk link pendek `vt.tiktok.com`) untuk embed.
 - **Draf:** disimpan automatik dalam SQLite di server. GitHub hanya dapat commit bila kau tekan Terbit.
+- **Cover AI:** butang **Jana dengan AI** jana cover dari tajuk dan ringkasan melalui Image API OpenRouter. Prompt boleh diubah sebelum jana, gambar dipotong ke 1600x838 WebP, dan kos setiap jana dipaparkan. Butang tersorok tanpa `OPENROUTER_API_KEY`.
 - **Imej OG automatik:** post tanpa cover dapat kad 1200x630 bertajuk untuk pratonton link WhatsApp/Threads.
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.
@@ -93,6 +94,9 @@ Port hanya dibuka di `127.0.0.1:8460`, jadi Studio tak boleh dicapai dari LAN at
 | `NOTIFY_WEBHOOK` | | Webhook Discord untuk notifikasi draf baru dari agent |
 | `STUDIO_URL` | | Default `https://studio.korokk.com`. Dipakai dalam link yang dipulangkan kepada agent dan connector MCP |
 | `ANTHROPIC_API_KEY` | | Untuk Feed: Claude Haiku terjemah dan ringkas berita. Tanpanya, item feed tak diproses |
+| `OPENROUTER_API_KEY` | | Untuk Cover AI. Tanpanya, butang **Jana dengan AI** tersorok |
+| `OPENROUTER_IMAGE_MODEL` | | Default `meta/muse-image` |
+| `OPENROUTER_IMAGE_STYLE` | | Gaya asas yang ditambah di hujung setiap prompt cover. Kosong = gaya lalai |
 | `RSSHUB_URL` | | Default `http://rsshub:1200` (servis dalam `compose.yaml`). Untuk sumber Threads |
 
 ## Agent

@@ -168,7 +168,7 @@ function tagField(root, initial, onChange) {
 }
 
 // Dialog ringkas: pengesahan atau satu input
-function ask({ title, text = '', input, ok = 'OK', danger = false }) {
+function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder = 'https://' }) {
   const dlg = $('#dlg');
   $('#dlg-title').textContent = title;
   $('#dlg-text').textContent = text;
@@ -176,7 +176,7 @@ function ask({ title, text = '', input, ok = 'OK', danger = false }) {
   const inp = $('#dlg-input');
   inp.hidden = input === undefined;
   inp.value = input ?? '';
-  inp.placeholder = input === undefined ? '' : 'https://';
+  inp.placeholder = input === undefined ? '' : placeholder;
   const okBtn = $('#dlg-ok');
   okBtn.textContent = ok;
   okBtn.classList.toggle('btn--danger', danger);
@@ -337,6 +337,7 @@ async function editorView(id) {
             <div class="cover" id="cover"></div>
             <div class="cover__actions">
               <button class="btn btn--sm" type="button" id="cover-up">Pilih gambar</button>
+              <button class="btn btn--sm" type="button" id="cover-ai" ${me.coverAi ? '' : 'hidden'}>Jana dengan AI</button>
               <button class="btn btn--sm btn--ghost" type="button" id="cover-rm">Buang</button>
             </div>
             <label class="field"><span class="mono">Teks alt cover</span><input class="input" id="alt" value="${esc(d.image_alt)}" placeholder="Terangkan gambar"></label>
@@ -669,6 +670,42 @@ async function editorView(id) {
   renderCover();
   $('#cover-up').addEventListener('click', () => pick('cover', 'image/*'));
   $('#cover-rm').addEventListener('click', () => { d.image = ''; queue({ image: '' }); renderCover(); });
+
+  // Cover AI: prompt lalai dari tajuk dan ringkasan, boleh diubah sebelum jana
+  $('#cover-ai').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    let timer;
+    try {
+      await flush();
+      const { prompt: lalai, model } = await api(`/api/drafts/${id}/cover-ai`);
+      const prompt = await ask({
+        title: 'Jana cover dengan AI',
+        text: `Model ${model}. Setiap kali jana akan tolak kredit OpenRouter.`,
+        input: lalai,
+        placeholder: 'Terangkan gambar yang dimahukan',
+        ok: 'Jana',
+      });
+      if (prompt === null) return;
+      btn.disabled = true;
+      const t0 = Date.now();
+      const tick = () => toast(`Menjana cover... ${Math.round((Date.now() - t0) / 1000)}s`);
+      tick();
+      timer = setInterval(tick, 1000);
+      const res = await api(`/api/drafts/${id}/cover-ai`, { method: 'POST', body: { prompt } });
+      clearInterval(timer);
+      d.image = res.draft.image;
+      d.og_auto = false;
+      if (!$('#credit').value.trim()) $('#credit').value = res.draft.image_credit || '';
+      renderCover();
+      const kos = typeof res.cost === 'number' ? ` · kos $${res.cost.toFixed(3)}` : '';
+      toast(`Cover siap${kos}. Tak puas hati? Tekan lagi.`, 'ok');
+    } catch (err) {
+      toast(esc(err.message), 'err');
+    } finally {
+      clearInterval(timer);
+      btn.disabled = false;
+    }
+  });
   $('#meta').addEventListener('focusout', () => { if (!d.image || d.og_auto) flush().then(renderCover); });
 
   $('#meta-btn').addEventListener('click', (e) => {

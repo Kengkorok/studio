@@ -18,6 +18,15 @@ export async function toWebp(buf) {
     .toBuffer();
 }
 
+// Cover AI: potong ke 1600x838 (nisbah OG 1.91:1), fokus pada bahagian paling menarik
+export async function toCoverWebp(buf) {
+  return sharp(buf, { failOn: 'error', limitInputPixels: 80e6 })
+    .rotate()
+    .resize(1600, 838, { fit: 'cover', position: 'attention' })
+    .webp({ quality: 82, effort: 5 })
+    .toBuffer();
+}
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
 // Pecah tajuk kepada baris ikut anggaran lebar huruf

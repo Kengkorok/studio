@@ -13,8 +13,8 @@ import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
 import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
 import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml, AUTHORS, cleanSumber } from './post.js';
-import { toWebp, toCoverWebp, ogCard } from './images.js';
-import { IMAGE_MODEL, NISBAH, imagegenOn, promptDari, janaGambar } from './imagegen.js';
+import { toWebp, toCoverWebp, toNisbahWebp, ogCard } from './images.js';
+import { IMAGE_MODEL, NISBAH, imagegenOn, promptDari, janaGambar, failRujukan } from './imagegen.js';
 import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
 import { agentRoutes, agentCount } from './agent.js';
@@ -96,7 +96,7 @@ app.use('/api/*', async (c, next) => {
   return next();
 });
 
-app.get('/api/me', (c) => c.json({ email: c.get('email'), repo: repoInfo.repo, site: SITE, komen: !!KOMEN_API, auth: authMode, coverAi: imagegenOn() ? IMAGE_MODEL : null }));
+app.get('/api/me', (c) => c.json({ email: c.get('email'), repo: repoInfo.repo, site: SITE, komen: !!KOMEN_API, auth: authMode, coverAi: imagegenOn() ? IMAGE_MODEL : null, rujukan: failRujukan().length }));
 
 // ---------- Senarai post ----------
 
@@ -235,26 +235,28 @@ app.post('/api/drafts/:id/imej-ai', async (c) => {
   if (!NISBAH.includes(nisbah)) return c.json({ ralat: 'Nisbah gambar tak sah.' }, 400);
   const prompt = (typeof b.prompt === 'string' && b.prompt.trim()) || promptDari(d);
   if (!prompt) return c.json({ ralat: 'Prompt kosong. Isi tajuk atau tulis prompt sendiri.' }, 400);
+  const aku = b.aku === true;
+  if (aku && !failRujukan().length) return c.json({ ralat: 'Tiada gambar rujukan dalam data/rujukan.' }, 400);
 
   for (const [k, j] of imejJobs) if (Date.now() - j.t > 3600_000) imejJobs.delete(k);
   const job = randomUUID();
   imejJobs.set(job, { id, status: 'proses', t: Date.now() });
   (async () => {
-    const { buf, cost, model } = await janaGambar(prompt, { nisbah });
-    const webp = untuk === 'cover' ? await toCoverWebp(buf) : await toWebp(buf);
+    const { buf, cost, model } = await janaGambar(prompt, { nisbah, aku });
+    const webp = untuk === 'cover' ? await toCoverWebp(buf) : await toNisbahWebp(buf, nisbah);
     const name = `${untuk === 'cover' ? 'cover-ai' : 'ai'}-${randomBytes(3).toString('hex')}.webp`;
     await mkdir(join(UPLOADS, id), { recursive: true });
     await writeFile(join(UPLOADS, id, name), webp);
     const url = `/uploads/${id}/${name}`;
     const now = getDraft(id);
     if (!now) throw Object.assign(new Error('Draf dah dipadam.'), { status: 404 });
-    const f = { ai_prompts: { ...now.ai_prompts, [name]: { prompt, nisbah } } };
+    const f = { ai_prompts: { ...now.ai_prompts, [name]: { prompt, nisbah, aku } } };
     if (untuk === 'cover') {
       Object.assign(f, { image: url, og_auto: false, dirty: true });
       if (!now.image_credit?.trim()) f.image_credit = 'Gambar: dijana AI';
     }
     const draft = updateDraft(id, f);
-    imejJobs.set(job, { id, status: 'siap', t: Date.now(), result: { url, prompt, nisbah, cost, model, size: webp.length, draft } });
+    imejJobs.set(job, { id, status: 'siap', t: Date.now(), result: { url, prompt, nisbah, aku, cost, model, size: webp.length, draft } });
   })().catch((e) => {
     console.error(e);
     imejJobs.set(job, { id, status: 'gagal', t: Date.now(), ralat: e.status ? e.message : 'Gambar tak dapat dijana.' });

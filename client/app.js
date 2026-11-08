@@ -184,8 +184,9 @@ function tagField(root, initial, onChange) {
 }
 
 // Dialog ringkas: pengesahan atau satu input
-// multiline guna textarea; pilihan ([[nilai, label]]) tambah senarai pilih, dan jawapan jadi { teks, pilih }
-function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder = 'https://', multiline = false, pilihan, pilih }) {
+// multiline guna textarea; pilihan ([[nilai, label]]) tambah senarai pilih dan tanda ({ teks, nilai }) tambah kotak tanda.
+// Dengan pilihan atau tanda, jawapan jadi { teks, pilih, tanda }
+function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder = 'https://', multiline = false, pilihan, pilih, tanda }) {
   const dlg = $('#dlg');
   $('#dlg-title').textContent = title;
   $('#dlg-text').textContent = text;
@@ -201,6 +202,11 @@ function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder =
     sel.innerHTML = pilihan.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
     sel.value = pilih ?? pilihan[0][0];
   }
+  $('#dlg-tanda').hidden = !tanda;
+  if (tanda) {
+    $('#dlg-tanda-teks').textContent = tanda.teks;
+    $('#dlg-tanda-in').checked = !!tanda.nilai;
+  }
   const okBtn = $('#dlg-ok');
   okBtn.textContent = ok;
   okBtn.classList.toggle('btn--danger', danger);
@@ -211,7 +217,7 @@ function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder =
     dlg.addEventListener('close', () => {
       if (dlg.returnValue !== 'ok') resolve(null);
       else if (input === undefined) resolve(true);
-      else resolve(pilihan ? { teks: inp.value.trim(), pilih: sel.value } : inp.value.trim());
+      else resolve(pilihan || tanda ? { teks: inp.value.trim(), pilih: sel.value, tanda: $('#dlg-tanda-in').checked } : inp.value.trim());
     }, { once: true });
   });
 }
@@ -537,7 +543,7 @@ async function editorView(id) {
     regen: () => {
       const { src, alt } = editor.getAttributes('image');
       const asal = d.ai_prompts?.[failAi(src)];
-      janaImej({ prompt: asal?.prompt || alt || '', nisbah: asal?.nisbah, ganti: true });
+      janaImej({ prompt: asal?.prompt || alt || '', nisbah: asal?.nisbah, aku: asal?.aku, ganti: true });
     },
   };
   cmdButtons.forEach((b) => {
@@ -686,7 +692,8 @@ async function editorView(id) {
     }
   }
 
-  async function janaImej({ prompt = '', nisbah = '16:9', ganti = false }) {
+  const AKU = 'Libatkan aku (guna gambar muka rujukan)';
+  async function janaImej({ prompt = '', nisbah = '16:9', aku = false, ganti = false }) {
     const asal = editor.state.selection;
     const r = await ask({
       title: ganti ? 'Jana semula gambar' : 'Jana gambar dengan AI',
@@ -696,11 +703,12 @@ async function editorView(id) {
       placeholder: 'Terangkan gambar yang dimahukan',
       pilihan: NISBAH,
       pilih: nisbah,
+      tanda: me.rujukan ? { teks: AKU, nilai: aku } : undefined,
       ok: 'Jana',
     });
     if (!r?.teks) return;
     try {
-      const { job } = await api(`/api/drafts/${id}/imej-ai`, { method: 'POST', body: { prompt: r.teks, nisbah: r.pilih } });
+      const { job } = await api(`/api/drafts/${id}/imej-ai`, { method: 'POST', body: { prompt: r.teks, nisbah: r.pilih, aku: r.tanda } });
       const node = { type: 'aiPending', attrs: { job, nisbah: r.pilih } };
       // Jana semula: kotak ganti gambar lama di tempat yang sama
       // Gambar baru: selepas perenggan tempat kursor, supaya ayat tak terpotong
@@ -792,17 +800,19 @@ async function editorView(id) {
     const btn = e.currentTarget;
     try {
       await flush();
-      const prompt = await ask({
+      const jawab = await ask({
         title: 'Jana cover dengan AI',
         text: `Model ${me.coverAi}. Setiap kali jana akan tolak kredit OpenRouter.`,
         input: [d.title, d.description].map((x) => (x || '').trim()).filter(Boolean).join('. '),
         multiline: true,
         placeholder: 'Terangkan gambar yang dimahukan',
+        tanda: me.rujukan ? { teks: AKU, nilai: d.ai_prompts?.[failAi(d.image)]?.aku } : undefined,
         ok: 'Jana',
       });
-      if (prompt === null) return;
+      if (jawab === null) return;
+      const { teks: prompt, tanda: aku } = typeof jawab === 'string' ? { teks: jawab, tanda: false } : jawab;
       btn.disabled = true;
-      const { job } = await api(`/api/drafts/${id}/imej-ai`, { method: 'POST', body: { prompt, untuk: 'cover' } });
+      const { job } = await api(`/api/drafts/${id}/imej-ai`, { method: 'POST', body: { prompt, aku, untuk: 'cover' } });
       const r = await tungguImej(job, 'Menjana cover');
       if (!r) return;
       d.image = r.url;

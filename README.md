@@ -34,6 +34,7 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Dijana di belakang (job), jadi kau boleh terus menulis dan tak kena had 100 saat Cloudflare. Muat semula halaman semasa menjana pun masih sambung.
   - Pilih gambar AI, tekan **Jana semula** untuk ubah prompt atau nisbah. Prompt setiap gambar disimpan dalam draf (`ai_prompts`), tak masuk HTML post.
   - Kos setiap jana dipaparkan.
+  - **Libatkan aku:** kotak dalam dialog jana (cover dan isi). Gambar muka dalam `data/rujukan/` (JPG/PNG/WebP, maks 4, potong ke kepala dan bahu) dihantar sebagai `input_references`, dan prompt minta ilustrasi, bukan foto. Kotak tersorok kalau folder kosong. Gambar rujukan tak masuk repo.
 - **Imej OG automatik:** post tanpa cover dapat kad 1200x630 bertajuk untuk pratonton link WhatsApp/Threads.
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.

@@ -27,6 +27,17 @@ export async function toCoverWebp(buf) {
     .toBuffer();
 }
 
+// Gambar AI dalam isi: potong ke nisbah yang dipilih (model kadang abaikan aspect_ratio), sisi panjang maks 1600px
+export async function toNisbahWebp(buf, nisbah) {
+  const [a, b] = nisbah.split(':').map(Number);
+  const [width, height] = a >= b ? [MAX_W, Math.round((MAX_W * b) / a)] : [Math.round((MAX_W * a) / b), MAX_W];
+  return sharp(buf, { failOn: 'error', limitInputPixels: 80e6 })
+    .rotate()
+    .resize(width, height, { fit: 'cover', position: 'attention' })
+    .webp({ quality: 82, effort: 5 })
+    .toBuffer();
+}
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
 // Pecah tajuk kepada baris ikut anggaran lebar huruf

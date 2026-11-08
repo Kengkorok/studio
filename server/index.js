@@ -8,13 +8,13 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { join, dirname } from 'node:path';
-import { randomBytes, createHash } from 'node:crypto';
+import { randomBytes, randomUUID, createHash } from 'node:crypto';
 
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
 import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
 import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml, AUTHORS, cleanSumber } from './post.js';
 import { toWebp, toCoverWebp, ogCard } from './images.js';
-import { IMAGE_MODEL, imagegenOn, promptDari, janaGambar } from './imagegen.js';
+import { IMAGE_MODEL, NISBAH, imagegenOn, promptDari, janaGambar } from './imagegen.js';
 import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
 import { agentRoutes, agentCount } from './agent.js';
@@ -35,6 +35,8 @@ const ID_RE = /^[0-9a-f-]{36}$/;
 const FILE_RE = /^[a-z0-9][a-z0-9._-]{0,120}$/;
 const TYPES = { webp: 'image/webp', png: 'image/png', mp4: 'video/mp4' };
 const hasMedia = (html) => /<(img|video|iframe)\b/.test(html);
+// Kotak sementara gambar AI yang belum siap: jangan terbit atau papar dalam pratonton
+const buangPending = (html) => html.replace(/<div data-ai-pending="[^"]*"[^>]*><\/div>/g, '');
 
 // Hantar fail dengan sokongan Range (Safari tak main video tanpanya)
 async function sendFile(c, file, headers = {}) {
@@ -218,27 +220,53 @@ app.post('/api/drafts/:id/images', bodyLimit({ maxSize: 25 * 1024 * 1024 }), asy
   return c.json({ url: `/uploads/${id}/${name}`, size: webp.length });
 });
 
-// Cover AI: prompt lalai dari tajuk dan ringkasan
-app.get('/api/drafts/:id/cover-ai', (c) => {
-  const d = getDraft(c.req.param('id'));
-  if (!d) return c.json({ ralat: 'Draf tiada' }, 404);
-  return c.json({ prompt: promptDari(d), model: IMAGE_MODEL });
-});
+// Gambar AI (cover atau dalam isi). Dijana di belakang sebab Cloudflare putuskan permintaan
+// melebihi 100 saat; klien tanya status sampai siap. Job disimpan sejam supaya muat semula halaman masih boleh sambung.
+const imejJobs = new Map(); // job -> { id, status: 'proses' | 'siap' | 'gagal', result, ralat, t }
 
-app.post('/api/drafts/:id/cover-ai', async (c) => {
+app.post('/api/drafts/:id/imej-ai', async (c) => {
   const id = c.req.param('id');
   const d = ID_RE.test(id) && getDraft(id);
   if (!d) return c.json({ ralat: 'Draf tiada' }, 404);
+  if (!imagegenOn()) return c.json({ ralat: 'OPENROUTER_API_KEY belum diset dalam .env Studio.' }, 400);
   const b = await c.req.json().catch(() => ({}));
+  const untuk = b.untuk === 'cover' ? 'cover' : 'isi';
+  const nisbah = untuk === 'cover' ? '16:9' : String(b.nisbah || '16:9');
+  if (!NISBAH.includes(nisbah)) return c.json({ ralat: 'Nisbah gambar tak sah.' }, 400);
   const prompt = (typeof b.prompt === 'string' && b.prompt.trim()) || promptDari(d);
-  const { buf, cost, model } = await janaGambar(prompt);
-  const webp = await toCoverWebp(buf);
-  const name = `cover-ai-${randomBytes(3).toString('hex')}.webp`;
-  await mkdir(join(UPLOADS, id), { recursive: true });
-  await writeFile(join(UPLOADS, id, name), webp);
-  const f = { image: `/uploads/${id}/${name}`, og_auto: false, dirty: true };
-  if (!d.image_credit?.trim()) f.image_credit = 'Gambar: dijana AI';
-  return c.json({ draft: updateDraft(id, f), cost, model, size: webp.length });
+  if (!prompt) return c.json({ ralat: 'Prompt kosong. Isi tajuk atau tulis prompt sendiri.' }, 400);
+
+  for (const [k, j] of imejJobs) if (Date.now() - j.t > 3600_000) imejJobs.delete(k);
+  const job = randomUUID();
+  imejJobs.set(job, { id, status: 'proses', t: Date.now() });
+  (async () => {
+    const { buf, cost, model } = await janaGambar(prompt, { nisbah });
+    const webp = untuk === 'cover' ? await toCoverWebp(buf) : await toWebp(buf);
+    const name = `${untuk === 'cover' ? 'cover-ai' : 'ai'}-${randomBytes(3).toString('hex')}.webp`;
+    await mkdir(join(UPLOADS, id), { recursive: true });
+    await writeFile(join(UPLOADS, id, name), webp);
+    const url = `/uploads/${id}/${name}`;
+    const now = getDraft(id);
+    if (!now) throw Object.assign(new Error('Draf dah dipadam.'), { status: 404 });
+    const f = { ai_prompts: { ...now.ai_prompts, [name]: { prompt, nisbah } } };
+    if (untuk === 'cover') {
+      Object.assign(f, { image: url, og_auto: false, dirty: true });
+      if (!now.image_credit?.trim()) f.image_credit = 'Gambar: dijana AI';
+    }
+    const draft = updateDraft(id, f);
+    imejJobs.set(job, { id, status: 'siap', t: Date.now(), result: { url, prompt, nisbah, cost, model, size: webp.length, draft } });
+  })().catch((e) => {
+    console.error(e);
+    imejJobs.set(job, { id, status: 'gagal', t: Date.now(), ralat: e.status ? e.message : 'Gambar tak dapat dijana.' });
+  });
+  return c.json({ job, status: 'proses' }, 202);
+});
+
+app.get('/api/drafts/:id/imej-ai/:job', (c) => {
+  const j = imejJobs.get(c.req.param('job'));
+  if (!j || j.id !== c.req.param('id')) return c.json({ ralat: 'Job gambar tiada (mungkin Studio dimulakan semula).' }, 404);
+  const { status, result, ralat } = j;
+  return c.json({ status, result, ralat });
 });
 
 // ---------- Video ----------
@@ -353,7 +381,7 @@ app.post('/api/drafts/:id/publish', async (c) => {
     return s.replace(re, `/${dir}/$1`);
   };
 
-  const body = prettyHtml(await rewrite(d.body)).replace(/(\n?<p><\/p>)+$/, '');
+  const body = prettyHtml(await rewrite(buangPending(d.body))).replace(/(\n?<p><\/p>)+$/, '');
   let image = await rewrite(d.image || '');
   let cover = d.cover;
   let og_auto = d.og_auto;
@@ -419,7 +447,7 @@ app.get('/preview/:id', (c) => {
     ${d.tags.length ? `<p class="post__tags mono">${d.tags.map((t) => `<a>#${esc(t)}</a>`).join(' ')}</p>` : ''}
   </header>
   ${cover}
-  <div class="prose">${d.body}</div>
+  <div class="prose">${buangPending(d.body)}</div>
   ${d.sumber.length ? `<aside class="post__sumber"><span class="mono muted">Sumber</span>${d.sumber.map((s) => `<a href="${esc(s.url)}" rel="noopener">${esc(s.title || s.url)} ↗</a>`).join('')}</aside>` : ''}
 </article></main>
 </body></html>`);

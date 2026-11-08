@@ -28,7 +28,12 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Video panjang: butang YouTube (atau tampal link YouTube terus), embed guna youtube-nocookie.com.
   - TikTok: tampal link video TikTok (termasuk link pendek `vt.tiktok.com`) untuk embed.
 - **Draf:** disimpan automatik dalam SQLite di server. GitHub hanya dapat commit bila kau tekan Terbit.
-- **Cover AI:** butang **Jana dengan AI** jana cover dari tajuk dan ringkasan melalui Image API OpenRouter. Prompt boleh diubah sebelum jana, gambar dipotong ke 1600x838 WebP, dan kos setiap jana dipaparkan. Butang tersorok tanpa `OPENROUTER_API_KEY`.
+- **Gambar AI** (Image API OpenRouter, butang tersorok tanpa `OPENROUTER_API_KEY`):
+  - **Cover:** butang **Jana dengan AI** dalam Tetapan. Prompt lalai dari tajuk dan ringkasan, gambar dipotong ke 1600x838 WebP.
+  - **Dalam isi:** butang ✦ dalam toolbar. Prompt lalai dari teks dipilih atau perenggan di kursor (dengan tajuk sebagai konteks). Pilih nisbah 16:9, 1:1, 4:5 atau 9:16. Gambar masuk selepas perenggan tu, teks alt diisi dari prompt.
+  - Dijana di belakang (job), jadi kau boleh terus menulis dan tak kena had 100 saat Cloudflare. Muat semula halaman semasa menjana pun masih sambung.
+  - Pilih gambar AI, tekan **Jana semula** untuk ubah prompt atau nisbah. Prompt setiap gambar disimpan dalam draf (`ai_prompts`), tak masuk HTML post.
+  - Kos setiap jana dipaparkan.
 - **Imej OG automatik:** post tanpa cover dapat kad 1200x630 bertajuk untuk pratonton link WhatsApp/Threads.
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.

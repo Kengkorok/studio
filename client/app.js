@@ -51,6 +51,22 @@ const Tiktok = Node.create({
   }]],
 });
 
+// Nama fail gambar AI dari src (kekal sama selepas diterbit ke /assets/blog/...)
+const failAi = (src) => /\/((?:cover-)?ai-[0-9a-f]{6}\.webp)$/.exec(src || '')?.[1];
+
+// Gambar AI yang sedang dijana: kotak sementara, diganti dengan gambar bila job siap (server buang kalau diterbit)
+const AiPending = Node.create({
+  name: 'aiPending',
+  group: 'block',
+  atom: true,
+  addAttributes: () => ({
+    job: { default: null, parseHTML: (el) => el.getAttribute('data-ai-pending') },
+    nisbah: { default: '16:9', parseHTML: (el) => el.getAttribute('data-nisbah') || '16:9' },
+  }),
+  parseHTML: () => [{ tag: 'div[data-ai-pending]' }],
+  renderHTML: ({ node }) => ['div', { 'data-ai-pending': node.attrs.job, 'data-nisbah': node.attrs.nisbah, style: `aspect-ratio: ${node.attrs.nisbah.replace(':', ' / ')}` }],
+});
+
 // ---------- Pembantu ----------
 
 async function api(path, { method = 'GET', body, form } = {}) {
@@ -168,15 +184,23 @@ function tagField(root, initial, onChange) {
 }
 
 // Dialog ringkas: pengesahan atau satu input
-function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder = 'https://' }) {
+// multiline guna textarea; pilihan ([[nilai, label]]) tambah senarai pilih, dan jawapan jadi { teks, pilih }
+function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder = 'https://', multiline = false, pilihan, pilih }) {
   const dlg = $('#dlg');
   $('#dlg-title').textContent = title;
   $('#dlg-text').textContent = text;
   $('#dlg-text').hidden = !text;
-  const inp = $('#dlg-input');
+  const inp = multiline ? $('#dlg-area') : $('#dlg-input');
+  $('#dlg-input').hidden = $('#dlg-area').hidden = true;
   inp.hidden = input === undefined;
   inp.value = input ?? '';
   inp.placeholder = input === undefined ? '' : placeholder;
+  const sel = $('#dlg-pilih');
+  sel.hidden = !pilihan;
+  if (pilihan) {
+    sel.innerHTML = pilihan.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('');
+    sel.value = pilih ?? pilihan[0][0];
+  }
   const okBtn = $('#dlg-ok');
   okBtn.textContent = ok;
   okBtn.classList.toggle('btn--danger', danger);
@@ -186,7 +210,8 @@ function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder =
   return new Promise((resolve) => {
     dlg.addEventListener('close', () => {
       if (dlg.returnValue !== 'ok') resolve(null);
-      else resolve(input === undefined ? true : inp.value.trim());
+      else if (input === undefined) resolve(true);
+      else resolve(pilihan ? { teks: inp.value.trim(), pilih: sel.value } : inp.value.trim());
     }, { once: true });
   });
 }
@@ -278,6 +303,7 @@ const TOOLS = [
   ['ordered', '<svg viewBox="0 0 24 24"><path d="M10 6h10M10 12h10M10 18h10M4 5h1.5v3M3.5 14h2.5l-2.5 3h2.5"/></svg>', 'Senarai bernombor'],
   ['quote', '<svg viewBox="0 0 24 24"><path d="M6 17h4v-5H7a3 3 0 0 1 3-3V7a5 5 0 0 0-5 5zm8 0h4v-5h-3a3 3 0 0 1 3-3V7a5 5 0 0 0-5 5z"/></svg>', 'Petikan'], '|',
   ['image', '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>', 'Gambar'],
+  ['ai', '✦', 'Gambar AI'],
   ['video', '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-3v9l-5-3z"/></svg>', 'Video (upload)'],
   ['youtube', '<svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.2 5 2.8-5 2.8z"/></svg>', 'YouTube'],
   ['tiktok', '<svg viewBox="0 0 24 24"><path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5M14 3c.4 2.6 2.2 4.4 5 4.6"/></svg>', 'TikTok'],
@@ -306,7 +332,7 @@ async function editorView(id) {
         </div>
       </div>
       <div class="toolbar" id="toolbar" role="toolbar" aria-label="Format">
-        ${TOOLS.map((t) => (t === '|' ? '<span class="toolbar__sep"></span>' : `<button type="button" class="tb" data-cmd="${t[0]}" title="${t[2]}" aria-label="${t[2]}">${t[1]}</button>`)).join('')}
+        ${TOOLS.filter((t) => t[0] !== 'ai' || me.coverAi).map((t) => (t === '|' ? '<span class="toolbar__sep"></span>' : `<button type="button" class="tb" data-cmd="${t[0]}" title="${t[2]}" aria-label="${t[2]}">${t[1]}</button>`)).join('')}
       </div>
       <div class="ed__body">
         <div class="ed__main">
@@ -363,6 +389,7 @@ async function editorView(id) {
         </span>
         <span class="bubble__img">
           <button type="button" class="tb tb--wide" data-cmd="alt" id="bubble-alt">Teks alt</button>
+          <button type="button" class="tb tb--wide" data-cmd="regen" id="bubble-regen">Jana semula</button>
           <button type="button" class="tb tb--wide" data-cmd="delimg">Buang</button>
         </span>
       </div>
@@ -407,7 +434,8 @@ async function editorView(id) {
   const bubbleText = $('.bubble__text', bubble);
   const bubbleImg = $('.bubble__img', bubble);
   const bubbleAlt = $('#bubble-alt', bubble);
-  const isMedia = (e) => ['image', 'video', 'youtube', 'tiktok'].some((n) => e.isActive(n));
+  const bubbleRegen = $('#bubble-regen', bubble);
+  const isMedia = (e) => ['image', 'video', 'youtube', 'tiktok', 'aiPending'].some((n) => e.isActive(n));
   const cmdButtons = [...view.querySelectorAll('.ed [data-cmd]')];
 
   const editor = new Editor({
@@ -422,6 +450,7 @@ async function editorView(id) {
       Video,
       Youtube.configure({ nocookie: true, width: 640, height: 360 }),
       Tiktok,
+      AiPending,
       Placeholder.configure({ placeholder: 'Mula menulis... (tampal atau seret gambar/video terus ke sini)' }),
       BubbleMenu.configure({
         element: bubble,
@@ -453,6 +482,7 @@ async function editorView(id) {
     bubbleText.hidden = media;
     bubbleImg.hidden = !media;
     bubbleAlt.hidden = !editor.isActive('image');
+    bubbleRegen.hidden = !(me.coverAi && editor.isActive('image') && d.ai_prompts?.[failAi(editor.getAttributes('image').src)]);
   }
 
   async function editLink() {
@@ -503,6 +533,12 @@ async function editorView(id) {
       if (alt !== null) editor.chain().focus().updateAttributes('image', { alt }).run();
     },
     delimg: () => editor.chain().focus().deleteSelection().run(),
+    ai: () => janaImej({ prompt: promptLalai() }),
+    regen: () => {
+      const { src, alt } = editor.getAttributes('image');
+      const asal = d.ai_prompts?.[failAi(src)];
+      janaImej({ prompt: asal?.prompt || alt || '', nisbah: asal?.nisbah, ganti: true });
+    },
   };
   cmdButtons.forEach((b) => {
     b.addEventListener('mousedown', (e) => e.preventDefault()); // kekalkan pilihan teks
@@ -596,6 +632,86 @@ async function editorView(id) {
     })();
     return true;
   }
+  // ----- Gambar AI -----
+  const NISBAH = [['16:9', 'Melintang 16:9'], ['1:1', 'Segi empat 1:1'], ['4:5', 'Tegak 4:5'], ['9:16', 'Tegak penuh 9:16']];
+  const pendek = (s, n = 120) => (s.length <= n ? s : `${s.slice(0, n).replace(/\s+\S*$/, '')}…`);
+  const kos = (c) => (typeof c === 'number' ? ` · kos $${c.toFixed(3)}` : '');
+
+  // Prompt lalai: teks dipilih atau perenggan di kursor, dengan tajuk post sebagai konteks
+  function promptLalai() {
+    const { state } = editor;
+    const { from, to, empty, $from, node } = state.selection;
+    const teks = node ? '' : (empty ? $from.parent.textContent : state.doc.textBetween(from, to, ' ')).trim().slice(0, 600).replace(/[.\s]+$/, '');
+    const tajuk = titleEl.value.trim();
+    return [teks, tajuk && `Untuk post bertajuk "${tajuk}"`].filter(Boolean).join('. ');
+  }
+
+  async function tungguImej(job, label) {
+    const t0 = Date.now();
+    for (;;) {
+      toast(`${label}... ${Math.round((Date.now() - t0) / 1000)}s <span class="muted">(boleh terus menulis)</span>`);
+      await new Promise((r) => setTimeout(r, 2000));
+      if (!alive) return null;
+      const j = await api(`/api/drafts/${id}/imej-ai/${job}`);
+      if (j.status === 'gagal') throw new Error(j.ralat);
+      if (j.status === 'siap') return j.result;
+    }
+  }
+
+  // Ganti kotak sementara dengan gambar (atau buang kalau attrs null). False kalau kotak dah dibuang
+  function gantiPending(job, attrs) {
+    let pos = null;
+    editor.state.doc.descendants((n, p) => {
+      if (n.type.name === 'aiPending' && n.attrs.job === job) pos = p;
+      return pos === null;
+    });
+    if (pos === null) return false;
+    const { tr, schema, doc } = editor.state;
+    const end = pos + doc.nodeAt(pos).nodeSize;
+    editor.view.dispatch(attrs ? tr.replaceWith(pos, end, schema.nodes.image.create(attrs)) : tr.delete(pos, end));
+    return true;
+  }
+
+  async function siapkanImej(job) {
+    try {
+      const r = await tungguImej(job, 'Menjana gambar');
+      if (!r) return;
+      d.ai_prompts = r.draft.ai_prompts;
+      const alt = pendek(r.prompt.replace(/\.?\s*Untuk post bertajuk ".*"$/, ''));
+      if (gantiPending(job, { src: r.url, alt })) toast(`Gambar siap${kos(r.cost)}. Tak puas hati? Pilih gambar, tekan Jana semula.`, 'ok');
+    } catch (e) {
+      if (!alive) return;
+      gantiPending(job, null);
+      toast(esc(e.message), 'err');
+    }
+  }
+
+  async function janaImej({ prompt = '', nisbah = '16:9', ganti = false }) {
+    const asal = editor.state.selection;
+    const r = await ask({
+      title: ganti ? 'Jana semula gambar' : 'Jana gambar dengan AI',
+      text: `Model ${me.coverAi}. Setiap kali jana akan tolak kredit OpenRouter.`,
+      input: prompt,
+      multiline: true,
+      placeholder: 'Terangkan gambar yang dimahukan',
+      pilihan: NISBAH,
+      pilih: nisbah,
+      ok: 'Jana',
+    });
+    if (!r?.teks) return;
+    try {
+      const { job } = await api(`/api/drafts/${id}/imej-ai`, { method: 'POST', body: { prompt: r.teks, nisbah: r.pilih } });
+      const node = { type: 'aiPending', attrs: { job, nisbah: r.pilih } };
+      // Jana semula: kotak ganti gambar lama di tempat yang sama
+      // Gambar baru: selepas perenggan tempat kursor, supaya ayat tak terpotong
+      if (ganti && asal.node) editor.chain().focus().setNodeSelection(asal.from).insertContent(node).run();
+      else editor.chain().insertContentAt(asal.$to.depth ? asal.$to.after(1) : asal.to, node).setTextSelection(asal.to).run();
+      siapkanImej(job);
+    } catch (e) { toast(esc(e.message), 'err'); }
+  }
+  // Kotak dari sesi sebelum (muat semula halaman): sambung tunggu job tu
+  editor.state.doc.descendants((n) => { if (n.type.name === 'aiPending') siapkanImej(n.attrs.job); });
+
   function pick(target, accept) {
     fileEl.dataset.target = target;
     fileEl.accept = accept;
@@ -674,35 +790,30 @@ async function editorView(id) {
   // Cover AI: prompt lalai dari tajuk dan ringkasan, boleh diubah sebelum jana
   $('#cover-ai').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
-    let timer;
     try {
       await flush();
-      const { prompt: lalai, model } = await api(`/api/drafts/${id}/cover-ai`);
       const prompt = await ask({
         title: 'Jana cover dengan AI',
-        text: `Model ${model}. Setiap kali jana akan tolak kredit OpenRouter.`,
-        input: lalai,
+        text: `Model ${me.coverAi}. Setiap kali jana akan tolak kredit OpenRouter.`,
+        input: [d.title, d.description].map((x) => (x || '').trim()).filter(Boolean).join('. '),
+        multiline: true,
         placeholder: 'Terangkan gambar yang dimahukan',
         ok: 'Jana',
       });
       if (prompt === null) return;
       btn.disabled = true;
-      const t0 = Date.now();
-      const tick = () => toast(`Menjana cover... ${Math.round((Date.now() - t0) / 1000)}s`);
-      tick();
-      timer = setInterval(tick, 1000);
-      const res = await api(`/api/drafts/${id}/cover-ai`, { method: 'POST', body: { prompt } });
-      clearInterval(timer);
-      d.image = res.draft.image;
+      const { job } = await api(`/api/drafts/${id}/imej-ai`, { method: 'POST', body: { prompt, untuk: 'cover' } });
+      const r = await tungguImej(job, 'Menjana cover');
+      if (!r) return;
+      d.image = r.url;
       d.og_auto = false;
-      if (!$('#credit').value.trim()) $('#credit').value = res.draft.image_credit || '';
+      d.ai_prompts = r.draft.ai_prompts;
+      if (!$('#credit').value.trim()) $('#credit').value = r.draft.image_credit || '';
       renderCover();
-      const kos = typeof res.cost === 'number' ? ` · kos $${res.cost.toFixed(3)}` : '';
-      toast(`Cover siap${kos}. Tak puas hati? Tekan lagi.`, 'ok');
+      toast(`Cover siap${kos(r.cost)}. Tak puas hati? Tekan lagi.`, 'ok');
     } catch (err) {
       toast(esc(err.message), 'err');
     } finally {
-      clearInterval(timer);
       btn.disabled = false;
     }
   });

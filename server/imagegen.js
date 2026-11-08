@@ -8,11 +8,14 @@ const ralat = (status, message) => Object.assign(new Error(message), { status })
 
 export const imagegenOn = () => !!process.env.OPENROUTER_API_KEY;
 
+export const NISBAH = ['16:9', '1:1', '4:5', '9:16'];
+
 export const promptDari = ({ title = '', description = '' }) => [title, description].map((s) => s.trim()).filter(Boolean).join('. ');
 
-export async function janaGambar(prompt) {
+export async function janaGambar(prompt, { nisbah = '16:9' } = {}) {
   prompt = String(prompt || '').trim();
   if (!prompt) throw ralat(400, 'Prompt kosong. Isi tajuk atau tulis prompt sendiri.');
+  if (!NISBAH.includes(nisbah)) throw ralat(400, 'Nisbah gambar tak sah.');
   if (!imagegenOn()) throw ralat(400, 'OPENROUTER_API_KEY belum diset dalam .env Studio.');
 
   // Tunggu maksimum 120 saat
@@ -29,7 +32,7 @@ export async function janaGambar(prompt) {
         'HTTP-Referer': STUDIO_URL,
         'X-Title': 'korokk Studio',
       },
-      body: JSON.stringify({ model: IMAGE_MODEL, prompt: `${prompt}\n\n${GAYA}`, aspect_ratio: '16:9', resolution: '1K' }),
+      body: JSON.stringify({ model: IMAGE_MODEL, prompt: `${prompt}\n\n${GAYA}`, aspect_ratio: nisbah, resolution: '1K' }),
     });
   } catch (e) {
     throw ralat(502, e.name === 'AbortError' ? 'OpenRouter ambil masa lebih 2 minit. Cuba lagi.' : `Tak dapat hubungi OpenRouter: ${e.message}`);

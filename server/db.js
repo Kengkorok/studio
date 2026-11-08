@@ -40,12 +40,13 @@ for (const [name, def] of [
   ['sumber_title', "TEXT NOT NULL DEFAULT ''"],
   ['image_credit', "TEXT NOT NULL DEFAULT ''"],
   ['sumber', "TEXT NOT NULL DEFAULT '[]'"], // [{ url, title }], ganti sumber_url/sumber_title
+  ['ai_prompts', "TEXT NOT NULL DEFAULT '{}'"], // { 'ai-xxxx.webp': { prompt, nisbah } } untuk Jana semula
 ]) if (!cols.has(name)) db.exec(`ALTER TABLE drafts ADD COLUMN ${name} ${def}`);
 // Pindah sumber tunggal lama ke senarai (lajur lama dikosongkan supaya tak dipindah semula)
 db.exec(`UPDATE drafts SET sumber = json_array(json_object('url', sumber_url, 'title', sumber_title)), sumber_url = '', sumber_title = ''
   WHERE sumber_url != ''`);
 
-const FIELDS = ['path', 'title', 'slug', 'slug_locked', 'date', 'description', 'tags', 'image', 'image_alt', 'cover', 'komen', 'og_auto', 'body', 'dirty', 'published_at', 'author', 'sumber', 'image_credit'];
+const FIELDS = ['path', 'title', 'slug', 'slug_locked', 'date', 'description', 'tags', 'image', 'image_alt', 'cover', 'komen', 'og_auto', 'body', 'dirty', 'published_at', 'author', 'sumber', 'image_credit', 'ai_prompts'];
 const now = () => new Date().toISOString();
 
 function decode(row) {
@@ -54,6 +55,7 @@ function decode(row) {
     ...row,
     tags: JSON.parse(row.tags),
     ...('sumber' in row ? { sumber: JSON.parse(row.sumber) } : {}),
+    ...('ai_prompts' in row ? { ai_prompts: JSON.parse(row.ai_prompts) } : {}),
     slug_locked: !!row.slug_locked,
     cover: !!row.cover,
     komen: !!row.komen,
@@ -67,7 +69,7 @@ function encode(d) {
   for (const k of FIELDS) {
     if (!(k in d)) continue;
     const v = d[k];
-    out[k] = k === 'tags' || k === 'sumber' ? JSON.stringify(v || []) : typeof v === 'boolean' ? Number(v) : v;
+    out[k] = k === 'tags' || k === 'sumber' ? JSON.stringify(v || []) : k === 'ai_prompts' ? JSON.stringify(v || {}) : typeof v === 'boolean' ? Number(v) : v;
   }
   return out;
 }

@@ -192,6 +192,19 @@ button { font: inherit; color: inherit; }
 .prose pre code { background: none; padding: 0; font: inherit; }
 .prose p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; color: var(--muted); opacity: .7; pointer-events: none; }
 
+/* Kotak sementara masa gambar AI dijana */
+.prose [data-ai-pending] {
+  display: grid; place-items: center; width: 100%; margin-inline: auto; border: 1px dashed var(--line); border-radius: 14px;
+  background: linear-gradient(100deg, var(--surface) 30%, var(--raised) 50%, var(--surface) 70%) 0 0 / 200% 100%;
+  color: var(--muted); font: 13px var(--mono); animation: ai-kilau 1.6s linear infinite;
+}
+.prose [data-ai-pending]::before { content: '✦ Menjana gambar AI…'; }
+.prose [data-ai-pending][data-nisbah="4:5"] { max-width: 480px; }
+.prose [data-ai-pending][data-nisbah="9:16"] { max-width: 325px; }
+.prose .ProseMirror-selectednode[data-ai-pending] { outline: 3px solid var(--accent); outline-offset: 3px; }
+@keyframes ai-kilau { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .prose [data-ai-pending] { animation: none; } }
+
 /* Menu terapung bila teks dipilih */
 .bubble { display: flex; gap: 2px; padding: 4px; border-radius: 12px; background: var(--ink); box-shadow: var(--shadow); }
 .bubble span { display: flex; gap: 2px; }

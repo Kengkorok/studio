@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="docs/ikon.svg" width="96" height="96" alt="Ikon korokk: gerbang mihrab dengan prompt terminal">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/ikon-gelap.svg">
+    <img src="docs/ikon.svg" width="96" height="96" alt="Ikon korokk: gerbang mihrab dengan prompt terminal">
+  </picture>
 </p>
 
 <h1 align="center">Studio</h1>
@@ -185,7 +188,7 @@ Kod: `server/` (Hono, node:sqlite, sharp, ffmpeg, Anthropic SDK) dan `client/` (
 
 ## Kredit
 
-Ikon dari brand korokk (gerbang mihrab dengan prompt terminal), sama macam favicon korokk.com.
+Ikon dari brand korokk (gerbang mihrab dengan prompt terminal), sama macam favicon korokk.com. Dua versi: [`docs/ikon.svg`](docs/ikon.svg) untuk mod cerah (kotak terakota, simbol krim) dan [`docs/ikon-gelap.svg`](docs/ikon-gelap.svg) untuk mod gelap (kotak krim, simbol terakota). Favicon dan ikon di bar atas Studio bertukar ikut tema.
 
 
 Font [Bricolage Grotesque](https://fonts.google.com/specimen/Bricolage+Grotesque) dan [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) dalam `fonts/` di bawah [SIL Open Font License](fonts/OFL.txt).

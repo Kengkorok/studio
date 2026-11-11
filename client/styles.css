@@ -70,7 +70,16 @@ button { font: inherit; color: inherit; }
   -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line);
 }
 .top__brand { display: inline-flex; align-items: center; gap: 8px; font: 600 19px/1 var(--display); letter-spacing: -.03em; text-decoration: none; }
-.top__dot { width: 9px; height: 9px; border-radius: 50%; background: var(--gold); }
+/* Ikon korokk: cerah = kotak terakota + simbol krim, gelap = kotak krim + simbol terakota */
+.top__ikon { width: 22px; height: 22px; flex: none; }
+.top__ikon rect { fill: #9E4A2F; }
+.top__ikon path { fill: #F1EBE0; }
+:root[data-theme="dark"] .top__ikon rect { fill: #F1EBE0; }
+:root[data-theme="dark"] .top__ikon path { fill: #9E4A2F; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .top__ikon rect { fill: #F1EBE0; }
+  :root:not([data-theme="light"]) .top__ikon path { fill: #9E4A2F; }
+}
 .top__nav { display: flex; gap: 4px; }
 .top__nav a { display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 999px; text-decoration: none; color: var(--muted); }
 .top__nav a.is-on { background: var(--surface); color: var(--ink); }

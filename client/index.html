@@ -9,7 +9,7 @@
     // Tema: ikut sistem, atau pilihan yang disimpan
     try { const t = localStorage.getItem('studio-tema'); if (t) document.documentElement.dataset.theme = t; } catch {}
   </script>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231B1C1E'/%3E%3Cpath d='M9 22l3-1 9-9-2-2-9 9z' fill='%23E8E8E4'/%3E%3Ccircle cx='23' cy='9' r='2.5' fill='%23C9A14A'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 512 512%22%3E%3Cstyle%3Erect%7Bfill:%239E4A2F%7Dpath%7Bfill:%23F1EBE0%7D%40media (prefers-color-scheme:dark)%7Brect%7Bfill:%23F1EBE0%7Dpath%7Bfill:%239E4A2F%7D%7D%3C/style%3E%3Crect width=%22512%22 height=%22512%22 rx=%22112%22/%3E%3Cpath transform=%22translate(87.04 87.04) scale(1.32)%22 fill-rule=%22evenodd%22 d=%22M44 244 V124 A104 104 0 0 1 128 21.94 A104 104 0 0 1 212 124 V244 Z M64 128 L104 128 L144 168 L104 208 L64 208 L104 168 Z M152 176 H192 V208 H152 Z%22/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..700&family=Host+Grotesk:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400..600;1,6..72,400..600&display=swap" rel="stylesheet">
@@ -17,7 +17,7 @@
 </head>
 <body>
   <header class="top">
-    <a class="top__brand" href="#/"><span class="top__dot" aria-hidden="true"></span>Studio</a>
+    <a class="top__brand" href="#/"><svg class="top__ikon" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="112"/><path transform="translate(87.04 87.04) scale(1.32)" fill-rule="evenodd" d="M44 244 V124 A104 104 0 0 1 128 21.94 A104 104 0 0 1 212 124 V244 Z M64 128 L104 128 L144 168 L104 208 L64 208 L104 168 Z M152 176 H192 V208 H152 Z"/></svg>Studio</a>
     <nav class="top__nav">
       <a href="#/" data-nav="tulisan">Tulisan</a>
       <a href="#/komen" data-nav="komen">Komen <span class="badge" id="komen-count" hidden></span></a>

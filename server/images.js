@@ -38,6 +38,22 @@ export async function toNisbahWebp(buf, nisbah) {
     .toBuffer();
 }
 
+// Thumbnail untuk senarai blog: lebar 480px (cukup untuk paparan 176px pada skrin 2x), nisbah asal kekal
+export async function toThumbWebp(buf) {
+  return sharp(buf, { failOn: 'error', limitInputPixels: 80e6 })
+    .rotate()
+    .resize({ width: 480, withoutEnlargement: true })
+    .webp({ quality: 74, effort: 5 })
+    .toBuffer();
+}
+
+// Saiz gambar untuk atribut width/height (elak halaman melompat masa gambar dimuat)
+export async function saizImej(buf) {
+  const m = await sharp(buf, { limitInputPixels: 80e6 }).metadata();
+  const [w, h] = (m.orientation || 1) >= 5 ? [m.height, m.width] : [m.width, m.height];
+  return w && h ? { width: w, height: h } : null;
+}
+
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
 // Pecah tajuk kepada baris ikut anggaran lebar huruf

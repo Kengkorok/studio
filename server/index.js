@@ -13,7 +13,7 @@ import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import { DATA_DIR, listDrafts, getDraft, getDraftByPath, createDraft, updateDraft, deleteDraft } from './db.js';
 import { listPosts, readFile as readRepoFile, commit, repoInfo, discussionComments } from './github.js';
 import { fromFile, toFile, postPath, postUrl, parsePath, slugify, todayKL, prettyHtml, AUTHORS, cleanSumber } from './post.js';
-import { toWebp, toCoverWebp, toNisbahWebp, ogCard } from './images.js';
+import { toWebp, toCoverWebp, toNisbahWebp, ogCard, toThumbWebp, saizImej } from './images.js';
 import { IMAGE_MODEL, NISBAH, imagegenOn, promptDari, janaGambar, failRujukan } from './imagegen.js';
 import { toMp4 } from './video.js';
 import { requireAccess, authMode } from './access.js';
@@ -394,7 +394,41 @@ app.post('/api/drafts/:id/publish', async (c) => {
     og_auto = true;
   }
 
-  const content = toFile({ ...d, body, image, cover, og_auto });
+  // Baca gambar yang akan diterbit: dari fail commit ni, salinan tempatan, atau laman (post lama)
+  const bacaAset = async (url) => {
+    if (!url.startsWith('/assets/')) return null;
+    const f = files.find((x) => `/${x.path}` === url);
+    if (f) return f.content;
+    try { return await readFile(join(ASSETS, url.slice('/assets/'.length))); } catch {}
+    try {
+      const r = await fetch(`${SITE}${url}`);
+      return r.ok ? Buffer.from(await r.arrayBuffer()) : null;
+    } catch { return null; }
+  };
+
+  // Thumbnail 480px untuk senarai blog; nama ikut hash supaya cache pelayar tak tunjuk yang lama
+  let thumb = '';
+  const sumberThumb = image && (await bacaAset(image));
+  if (sumberThumb) {
+    const t = await toThumbWebp(sumberThumb);
+    const name = `thumb-${createHash('sha1').update(t).digest('hex').slice(0, 6)}.webp`;
+    files.push({ path: `${dir}/${name}`, content: t });
+    thumb = `/${dir}/${name}`;
+  }
+
+  // width/height pada gambar dalam isi yang belum ada saiz
+  const saiz = new Map();
+  for (const [, src] of body.matchAll(/<img\b(?![^>]*\bwidth=)[^>]*\bsrc="([^"]+)"/g)) {
+    if (saiz.has(src)) continue;
+    const buf = await bacaAset(src);
+    saiz.set(src, buf ? await saizImej(buf).catch(() => null) : null);
+  }
+  const bodyAkhir = body.replace(/<img\b(?![^>]*\bwidth=)([^>]*\bsrc="([^"]+)"[^>]*?)(\s*\/?)>/g, (tag, attrs, src, tutup) => {
+    const s = saiz.get(src);
+    return s ? `<img${attrs} width="${s.width}" height="${s.height}"${tutup}>` : tag;
+  });
+
+  const content = toFile({ ...d, body: bodyAkhir, image, thumb, cover, og_auto });
   const deletes = d.path && d.path !== newPath ? [d.path] : [];
   const verb = d.path ? 'kemas kini' : 'post';
   const sha = await commit({
@@ -408,7 +442,7 @@ app.post('/api/drafts/:id/publish', async (c) => {
     await mkdir(dirname(local), { recursive: true });
     await writeFile(local, f.content);
   }
-  const saved = updateDraft(d.id, { path: newPath, body, image, cover, og_auto, slug_locked: true, dirty: false, published_at: new Date().toISOString() });
+  const saved = updateDraft(d.id, { path: newPath, body: bodyAkhir, image, cover, og_auto, slug_locked: true, dirty: false, published_at: new Date().toISOString() });
   return c.json({ ok: true, commit: sha, url: `${SITE}${postUrl(d)}`, draft: saved });
 });
 

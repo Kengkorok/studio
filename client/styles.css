@@ -167,6 +167,13 @@ button { font: inherit; color: inherit; }
 .prose { max-width: 680px; margin: 32px auto 0; font: 400 20px/1.68 var(--serif); color: var(--prose); overflow-wrap: break-word; }
 .prose .ProseMirror { outline: none; min-height: 50vh; }
 .prose .ProseMirror > * + * { margin-top: 1.1em; }
+/* Jadual dalam editor */
+.prose .tableWrapper { overflow-x: auto; }
+.prose table { width: 100%; border-collapse: collapse; font-size: .8em; }
+.prose th, .prose td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+.prose th { font-weight: 600; }
+.prose td > p, .prose th > p { margin: 0; }
+.prose .selectedCell { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .prose p { margin: 0; }
 .prose p, .prose li { text-align: justify; text-wrap: pretty; hyphens: auto; }
 .prose h2, .prose h3 { margin: 0; font-family: var(--display); color: var(--ink); letter-spacing: -.03em; font-weight: 600; }

@@ -58,6 +58,7 @@ export function toFile(d) {
   if (d.description) fm.description = d.description;
   if (d.tags?.length) fm.tags = d.tags;
   if (d.image) fm.image = d.image;
+  if (d.image && d.thumb) fm.thumb = d.thumb;
   if (d.image && d.image_alt) fm.image_alt = d.image_alt;
   if (d.image && d.image_credit) fm.image_credit = d.image_credit;
   if (d.image && d.cover === false) fm.cover = false;
@@ -89,6 +90,9 @@ export function postUrl(d) {
 // Kemaskan HTML editor supaya senang dibaca dalam mod </> dan dalam git diff
 export function prettyHtml(html) {
   return String(html || '')
+    // Jadual dari editor: buang colgroup dan min-width yang Tiptap tambah, CSS blog dah urus lebar
+    .replace(/<colgroup>[\s\S]*?<\/colgroup>/g, '')
+    .replace(/<table style="min-width: \d+px;?">/g, '<table>')
     .replace(/>\s*(<(?:p|h[1-6]|ul|ol|li|blockquote|pre|hr|figure|img|video|table|thead|tbody|tr|div)\b)/g, '>\n$1')
     .replace(/(<\/(?:ul|ol|blockquote|table|thead|tbody|figure|div)>)/g, '\n$1')
     .replace(/\n{2,}/g, '\n')

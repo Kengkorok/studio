@@ -5,6 +5,7 @@ import Image from '@tiptap/extension-image';
 import Youtube from '@tiptap/extension-youtube';
 import BubbleMenu from '@tiptap/extension-bubble-menu';
 import { Placeholder } from '@tiptap/extensions';
+import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table';
 import { TAG_MAX, tagSlug, tagMirip } from '../shared/tags.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -216,7 +217,7 @@ function ask({ title, text = '', input, ok = 'OK', danger = false, placeholder =
   return new Promise((resolve) => {
     dlg.addEventListener('close', () => {
       if (dlg.returnValue !== 'ok') resolve(null);
-      else if (input === undefined) resolve(true);
+      else if (input === undefined) resolve(pilihan ? { pilih: sel.value } : true);
       else resolve(pilihan || tanda ? { teks: inp.value.trim(), pilih: sel.value, tanda: $('#dlg-tanda-in').checked } : inp.value.trim());
     }, { once: true });
   });
@@ -313,6 +314,7 @@ const TOOLS = [
   ['video', '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10.5 5-3v9l-5-3z"/></svg>', 'Video (upload)'],
   ['youtube', '<svg viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="4"/><path d="m10 9.2 5 2.8-5 2.8z"/></svg>', 'YouTube'],
   ['tiktok', '<svg viewBox="0 0 24 24"><path d="M14 3v11.5a3.5 3.5 0 1 1-3.5-3.5M14 3c.4 2.6 2.2 4.4 5 4.6"/></svg>', 'TikTok'],
+  ['table', '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16"/></svg>', 'Jadual'],
   ['hr', '<svg viewBox="0 0 24 24"><path d="M4 12h16"/></svg>', 'Garis pemisah'], '|',
   ['html', '&lt;/&gt;', 'Tukar ke HTML'],
 ];
@@ -456,6 +458,11 @@ async function editorView(id) {
       Video,
       Youtube.configure({ nocookie: true, width: 640, height: 360 }),
       Tiktok,
+      // Jadual: tanpa ini, jadual dalam post lama jadi satu perenggan leper bila dibuka dalam editor
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       AiPending,
       Placeholder.configure({ placeholder: 'Mula menulis... (tampal atau seret gambar/video terus ke sini)' }),
       BubbleMenu.configure({
@@ -476,7 +483,7 @@ async function editorView(id) {
     h2: () => editor.isActive('heading', { level: 2 }), h3: () => editor.isActive('heading', { level: 3 }),
     bold: () => editor.isActive('bold'), italic: () => editor.isActive('italic'), underline: () => editor.isActive('underline'),
     link: () => editor.isActive('link'), bullet: () => editor.isActive('bulletList'), ordered: () => editor.isActive('orderedList'),
-    quote: () => editor.isActive('blockquote'), html: () => htmlMode,
+    quote: () => editor.isActive('blockquote'), table: () => editor.isActive('table'), html: () => htmlMode,
   };
   function syncTools() {
     cmdButtons.forEach((b) => {
@@ -516,6 +523,19 @@ async function editorView(id) {
     ordered: () => editor.chain().focus().toggleOrderedList().run(),
     quote: () => editor.chain().focus().toggleBlockquote().run(),
     hr: () => editor.chain().focus().setHorizontalRule().run(),
+    table: async () => {
+      if (!editor.isActive('table')) {
+        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        return;
+      }
+      const r = await ask({
+        title: 'Ubah jadual',
+        text: 'Tekan Tab dalam sel terakhir untuk tambah baris baru.',
+        pilihan: [['addRowAfter', 'Tambah baris di bawah'], ['addColumnAfter', 'Tambah lajur di kanan'], ['deleteRow', 'Buang baris ni'], ['deleteColumn', 'Buang lajur ni'], ['toggleHeaderRow', 'Baris pertama jadi tajuk / biasa'], ['deleteTable', 'Buang seluruh jadual']],
+        ok: 'Buat',
+      });
+      if (r?.pilih) editor.chain().focus()[r.pilih]().run();
+    },
     image: () => pick('body', 'image/*'),
     video: () => pick('video', 'video/*'),
     youtube: async () => {

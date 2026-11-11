@@ -432,7 +432,7 @@ app.post('/api/drafts/:id/publish', async (c) => {
   const deletes = d.path && d.path !== newPath ? [d.path] : [];
   const verb = d.path ? 'kemas kini' : 'post';
   const sha = await commit({
-    message: `${verb}: ${d.title}\n\nDiterbitkan dari Studio oleh ${c.get('email')}`,
+    message: `${verb}: ${d.title}\n\nDiterbitkan dari Studio`,
     files: [...files, { path: newPath, content }],
     deletes,
   });
@@ -450,7 +450,7 @@ app.post('/api/drafts/:id/publish', async (c) => {
 app.post('/api/drafts/:id/unpublish', async (c) => {
   const d = getDraft(c.req.param('id'));
   if (!d?.path) return c.json({ ralat: 'Post ni belum diterbit.' }, 400);
-  await commit({ message: `tarik balik: ${d.title}\n\nDari Studio oleh ${c.get('email')}`, deletes: [d.path] });
+  await commit({ message: `tarik balik: ${d.title}\n\nDari Studio`, deletes: [d.path] });
   return c.json({ ok: true, draft: updateDraft(d.id, { path: null, dirty: true, published_at: null }) });
 });
 

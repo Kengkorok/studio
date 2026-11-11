@@ -178,7 +178,7 @@ app.put('/api/drafts/:id', async (c) => {
   for (const k of ['title', 'description', 'image', 'image_alt', 'image_credit', 'body']) if (typeof b[k] === 'string') f[k] = b[k];
   if (Array.isArray(b.sumber)) f.sumber = cleanSumber(b.sumber);
   if (AUTHORS.includes(b.author)) f.author = b.author;
-  for (const k of ['cover', 'komen']) if (typeof b[k] === 'boolean') f[k] = b[k];
+  for (const k of ['cover', 'komen', 'pin']) if (typeof b[k] === 'boolean') f[k] = b[k];
   if (Array.isArray(b.tags)) f.tags = [...new Set(b.tags.map((t) => slugify(t)).filter(Boolean))].slice(0, 8);
   if (typeof b.date === 'string' && DATE_RE.test(b.date)) f.date = b.date;
   if (typeof b.slug === 'string') { f.slug = slugify(b.slug); f.slug_locked = true; }

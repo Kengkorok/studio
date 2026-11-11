@@ -381,6 +381,8 @@ async function editorView(id) {
           </div>
           <div class="meta__group">
             <label class="check"><input type="checkbox" id="komen" ${d.komen ? 'checked' : ''}> Buka komen</label>
+            <label class="check"><input type="checkbox" id="pin" ${d.pin ? 'checked' : ''}> Pin di laman utama</label>
+            <p class="hint">Post yang dipin keluar paling atas dalam "Tulisan terkini". Kalau lebih dari satu dipin, yang terbaru dipakai.</p>
           </div>
           <div class="meta__group meta__danger">
             ${d.path ? '<button class="btn btn--sm btn--ghost" type="button" id="unpublish">Tarik balik dari laman</button>' : ''}
@@ -802,6 +804,7 @@ async function editorView(id) {
   $('#sumber-add').addEventListener('click', () => $('input', sumberRow()).focus());
   $('#show-cover').addEventListener('change', (e) => queue({ cover: e.target.checked }));
   $('#komen').addEventListener('change', (e) => queue({ komen: e.target.checked }));
+  $('#pin').addEventListener('change', (e) => queue({ pin: e.target.checked }));
 
   function renderCover() {
     const box = $('#cover');

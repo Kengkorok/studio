@@ -41,12 +41,13 @@ for (const [name, def] of [
   ['image_credit', "TEXT NOT NULL DEFAULT ''"],
   ['sumber', "TEXT NOT NULL DEFAULT '[]'"], // [{ url, title }], ganti sumber_url/sumber_title
   ['ai_prompts', "TEXT NOT NULL DEFAULT '{}'"], // { 'ai-xxxx.webp': { prompt, nisbah } } untuk Jana semula
+  ['pin', 'INTEGER NOT NULL DEFAULT 0'], // dipin di atas "Tulisan terkini" laman utama
 ]) if (!cols.has(name)) db.exec(`ALTER TABLE drafts ADD COLUMN ${name} ${def}`);
 // Pindah sumber tunggal lama ke senarai (lajur lama dikosongkan supaya tak dipindah semula)
 db.exec(`UPDATE drafts SET sumber = json_array(json_object('url', sumber_url, 'title', sumber_title)), sumber_url = '', sumber_title = ''
   WHERE sumber_url != ''`);
 
-const FIELDS = ['path', 'title', 'slug', 'slug_locked', 'date', 'description', 'tags', 'image', 'image_alt', 'cover', 'komen', 'og_auto', 'body', 'dirty', 'published_at', 'author', 'sumber', 'image_credit', 'ai_prompts'];
+const FIELDS = ['path', 'title', 'slug', 'slug_locked', 'date', 'description', 'tags', 'image', 'image_alt', 'cover', 'komen', 'og_auto', 'body', 'dirty', 'published_at', 'author', 'sumber', 'image_credit', 'ai_prompts', 'pin'];
 const now = () => new Date().toISOString();
 
 function decode(row) {
@@ -59,6 +60,7 @@ function decode(row) {
     slug_locked: !!row.slug_locked,
     cover: !!row.cover,
     komen: !!row.komen,
+    pin: !!row.pin,
     og_auto: !!row.og_auto,
     dirty: !!row.dirty,
   };

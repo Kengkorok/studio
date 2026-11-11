@@ -43,6 +43,7 @@ export function fromFile(path, text) {
     image_alt: fm.image_alt ? String(fm.image_alt) : '',
     cover: fm.cover !== false,
     komen: fm.komen !== false,
+    pin: fm.pin === true,
     og_auto: fm.og_auto === true,
     author: AUTHORS.includes(fm.author) ? fm.author : 'safwan',
     // Post lama simpan satu objek; sekarang senarai
@@ -66,6 +67,7 @@ export function toFile(d) {
   if (d.sumber?.length) fm.sumber = d.sumber.map((s) => ({ title: s.title || s.url, url: s.url }));
   if (d.og_auto) fm.og_auto = true;
   if (d.komen === false) fm.komen = false;
+  if (d.pin) fm.pin = true;
   const yaml = YAML.stringify(fm, { lineWidth: 0, flowCollectionPadding: false }).trimEnd();
   // {% raw %} supaya teks macam {{ ini }} dalam post tak diproses oleh Liquid
   return `---\n${yaml}\n---\n{% raw %}\n${d.body.trim()}\n{% endraw %}\n`;

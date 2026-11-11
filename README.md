@@ -39,6 +39,7 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Dijana di belakang (job), jadi kau boleh terus menulis dan tak kena had 100 saat Cloudflare. Muat semula halaman semasa menjana pun masih sambung.
   - Pilih gambar AI, tekan **Jana semula** untuk ubah prompt atau nisbah. Prompt setiap gambar disimpan dalam draf (`ai_prompts`), tak masuk HTML post.
   - Kos setiap jana dipaparkan.
+  - **Muat turun:** butang **Muat turun** bawah cover AI, dan dalam menu terapung bila gambar AI dalam isi dipilih. Fail yang dimuat turun ialah WebP yang sama macam dalam post (nama `<slug>-<fail>.webp`). Gambar asal dari OpenRouter tak disimpan.
   - **Libatkan aku:** kotak dalam dialog jana (cover dan isi). Gambar muka dalam `data/rujukan/` (JPG/PNG/WebP, maks 4, potong ke kepala dan bahu) dihantar sebagai `input_references`, dan prompt minta ilustrasi, bukan foto. Kotak tersorok kalau folder kosong. Gambar rujukan tak masuk repo.
 - **Pin:** kotak **Pin di laman utama** dalam Tetapan. Post yang dipin keluar paling atas dalam "Tulisan terkini" korokk.com (`pin: true`).
 - **Panel Tetapan boleh dilaras:** seret garisan di tepi kiri panel (300 hingga 720px), atau fokus pada garisan dan tekan anak panah kiri/kanan. Dua klik untuk set semula ke 380px. Lebar disimpan dalam pelayar.
@@ -177,7 +178,7 @@ Kalau slug atau tarikh post lama ditukar, fail lama dibuang dalam commit yang sa
 
 ## Backup
 
-Semua draf, gambar belum terbit, feed dan token connector ada dalam folder `data/` (`studio.db` dan `uploads/`).
+Semua draf, gambar belum terbit, feed dan token connector ada dalam folder `data/` (`studio.db` dan `uploads/`). Lepas terbit, fail dalam `uploads/<id>/` yang tak dipakai lagi (contohnya gambar AI yang dijana semula atau cover lama) dibuang sendiri. Fail yang kurang 10 minit dibiar dulu, kalau-kalau job AI masih berjalan.
 
 [`backup-hdd.sh`](backup-hdd.sh) backup folder tu ke HDD setiap hari (cron 03:30) dan simpan 14 salinan terakhir. `studio.db` guna mod WAL, jadi skrip ambil snapshot melalui API backup SQLite dan semak `integrity_check`, bukan `cp` biasa. Log ditulis ke `backup-hdd.log` (tak di-commit).
 

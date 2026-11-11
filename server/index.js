@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
 import { bodyLimit } from 'hono/body-limit';
-import { mkdir, readFile, writeFile, rm, stat } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, stat, readdir } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -443,8 +443,22 @@ app.post('/api/drafts/:id/publish', async (c) => {
     await writeFile(local, f.content);
   }
   const saved = updateDraft(d.id, { path: newPath, body: bodyAkhir, image, cover, og_auto, slug_locked: true, dirty: false, published_at: new Date().toISOString() });
+  bersihUploads(d.id, `${saved.body} ${saved.image}`).catch((e) => console.error('bersih uploads:', e));
   return c.json({ ok: true, commit: sha, url: `${SITE}${postUrl(d)}`, draft: saved });
 });
+
+// Lepas terbit, fail yang dipakai dah disalin ke assets/. Buang yang tinggal dalam uploads/<id>
+// (gambar AI yang ditolak, cover lama). Fail kurang 10 minit dibiar: mungkin job AI masih berjalan.
+async function bersihUploads(id, dipakai) {
+  const dir = join(UPLOADS, id);
+  const names = await readdir(dir).catch(() => []);
+  for (const n of names) {
+    if (dipakai.includes(`/uploads/${id}/${n}`)) continue;
+    const s = await stat(join(dir, n)).catch(() => null);
+    if (!s?.isFile() || Date.now() - s.mtimeMs < 600_000) continue;
+    await rm(join(dir, n), { force: true });
+  }
+}
 
 // Tarik balik: buang fail post dari repo, draf kekal dalam Studio
 app.post('/api/drafts/:id/unpublish', async (c) => {

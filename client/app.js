@@ -326,6 +326,21 @@ function prettyHtml(html) {
     .replace(/\n{2,}/g, '\n').trim();
 }
 
+// Muat turun gambar AI sebagai WebP (fail yang sama macam dalam post, tiada salinan asal disimpan)
+async function muatTurun(src, slug) {
+  const nama = `${slug || 'gambar'}-${failAi(src) || 'gambar.webp'}`;
+  try {
+    const r = await fetch(src);
+    if (!r.ok) throw new Error(r.status);
+    const url = URL.createObjectURL(await r.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: nama });
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  } catch {
+    window.open(src, '_blank', 'noopener'); // gambar dari domain lain tanpa CORS: buka di tab baru, simpan sendiri
+  }
+}
+
 // Lebar panel tetapan: seret pemegang, anak panah kiri/kanan, dua klik set semula. Disimpan dalam pelayar.
 const META_W = { lalai: 380, min: 300, max: 720 };
 function lebarPanel(body, grip) {
@@ -417,6 +432,7 @@ async function editorView(id) {
             <div class="cover__actions">
               <button class="btn btn--sm" type="button" id="cover-up">Pilih gambar</button>
               <button class="btn btn--sm" type="button" id="cover-ai" ${me.coverAi ? '' : 'hidden'}>Jana dengan AI</button>
+              <button class="btn btn--sm" type="button" id="cover-dl" hidden>Muat turun</button>
               <button class="btn btn--sm btn--ghost" type="button" id="cover-rm">Buang</button>
             </div>
             <label class="field"><span class="mono">Teks alt cover</span><input class="input" id="alt" value="${esc(d.image_alt)}" placeholder="Terangkan gambar"></label>
@@ -445,6 +461,7 @@ async function editorView(id) {
         <span class="bubble__img">
           <button type="button" class="tb tb--wide" data-cmd="alt" id="bubble-alt">Teks alt</button>
           <button type="button" class="tb tb--wide" data-cmd="regen" id="bubble-regen">Jana semula</button>
+          <button type="button" class="tb tb--wide" data-cmd="dl" id="bubble-dl">Muat turun</button>
           <button type="button" class="tb tb--wide" data-cmd="delimg">Buang</button>
         </span>
       </div>
@@ -490,6 +507,7 @@ async function editorView(id) {
   const bubbleImg = $('.bubble__img', bubble);
   const bubbleAlt = $('#bubble-alt', bubble);
   const bubbleRegen = $('#bubble-regen', bubble);
+  const bubbleDl = $('#bubble-dl', bubble);
   const isMedia = (e) => ['image', 'video', 'youtube', 'tiktok', 'aiPending'].some((n) => e.isActive(n));
   const cmdButtons = [...view.querySelectorAll('.ed [data-cmd]')];
 
@@ -542,6 +560,7 @@ async function editorView(id) {
     bubbleText.hidden = media;
     bubbleImg.hidden = !media;
     bubbleAlt.hidden = !editor.isActive('image');
+    bubbleDl.hidden = !(editor.isActive('image') && failAi(editor.getAttributes('image').src));
     bubbleRegen.hidden = !(me.coverAi && editor.isActive('image') && d.ai_prompts?.[failAi(editor.getAttributes('image').src)]);
   }
 
@@ -605,6 +624,7 @@ async function editorView(id) {
       const alt = await ask({ title: 'Teks alt gambar', text: 'Penerangan ringkas untuk pembaca skrin dan bila gambar gagal dimuat.', input: editor.getAttributes('image').alt || '', ok: 'Simpan' });
       if (alt !== null) editor.chain().focus().updateAttributes('image', { alt }).run();
     },
+    dl: () => muatTurun(editor.getAttributes('image').src, d.slug),
     delimg: () => editor.chain().focus().deleteSelection().run(),
     ai: () => janaImej({ prompt: promptLalai() }),
     regen: () => {
@@ -858,9 +878,11 @@ async function editorView(id) {
       ? `<img src="/api/drafts/${id}/og.png?t=${Date.now()}" alt=""><span class="cover__tag mono">auto</span>`
       : `<img src="${esc(d.image)}" alt="">`;
     $('#cover-rm').hidden = auto;
+    $('#cover-dl').hidden = auto || !failAi(d.image);
   }
   renderCover();
   $('#cover-up').addEventListener('click', () => pick('cover', 'image/*'));
+  $('#cover-dl').addEventListener('click', () => muatTurun(d.image, d.slug));
   $('#cover-rm').addEventListener('click', () => { d.image = ''; queue({ image: '' }); renderCover(); });
 
   // Cover AI: prompt lalai dari tajuk dan ringkasan, boleh diubah sebelum jana

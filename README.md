@@ -19,12 +19,14 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Tebal, condong, garis bawah, pautan, H2/H3, senarai, petikan, garis pemisah dan gambar.
   - Menu kecil muncul bila teks dipilih.
   - Butang `</>` tukar ke HTML mentah dan balik.
-  - Perenggan rata kiri-kanan (justify), sama macam di laman.
+  - **Jadual:** butang jadual dalam toolbar masukkan jadual 3x3. Tekan lagi dalam jadual untuk tambah/buang baris atau lajur, tukar baris tajuk, atau padam jadual.
+  - Perenggan dalam editor rata kiri-kanan (justify).
 - **Tag:** cadangan dari tag yang pernah diguna, supaya ejaan tag kekal seragam.
 - **Sumber:** satu atau lebih link sumber setiap post (butang **+ Tambah sumber**). Keluar sebagai kotak "Sumber" di hujung post.
 - **Gambar:**
   - Tampal, seret atau pilih fail.
   - Gambar dikecilkan ke WebP (lebar maks 1600px) dan metadata (termasuk lokasi GPS) dibuang.
+  - Masa terbit: thumbnail 480px (`thumb-<hash>.webp`) dijana dari cover untuk senarai blog, dan `width`/`height` ditambah pada gambar dalam isi supaya halaman tak melompat masa dimuat.
 - **Video:**
   - Upload (butang, tampal atau seret) sehingga 1GB dan 10 minit. Dihantar dalam cebisan 32MB sebab Cloudflare hadkan 100MB setiap permintaan.
   - ffmpeg tukar ke MP4 H.264 (sisi panjang maks 1280px), buang metadata dan jana poster WebP. Hasil mesti bawah 45MB supaya repo laman kekal kecil.
@@ -38,6 +40,7 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Pilih gambar AI, tekan **Jana semula** untuk ubah prompt atau nisbah. Prompt setiap gambar disimpan dalam draf (`ai_prompts`), tak masuk HTML post.
   - Kos setiap jana dipaparkan.
   - **Libatkan aku:** kotak dalam dialog jana (cover dan isi). Gambar muka dalam `data/rujukan/` (JPG/PNG/WebP, maks 4, potong ke kepala dan bahu) dihantar sebagai `input_references`, dan prompt minta ilustrasi, bukan foto. Kotak tersorok kalau folder kosong. Gambar rujukan tak masuk repo.
+- **Pin:** kotak **Pin di laman utama** dalam Tetapan. Post yang dipin keluar paling atas dalam "Tulisan terkini" korokk.com (`pin: true`).
 - **Imej OG automatik:** post tanpa cover dapat kad 1200x630 bertajuk untuk pratonton link WhatsApp/Threads.
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.
@@ -161,10 +164,13 @@ Panduan gaya ada dalam [`agent/gaya-tulisan.md`](agent/gaya-tulisan.md). Untuk u
 ## Macam mana post disimpan
 
 Terbit menghasilkan **satu commit** yang mengandungi:
-- `_posts/TARIKH-slug.html`: front matter (tajuk, ringkasan, tag, imej, penulis, senarai sumber) dan isi HTML dalam `{% raw %}` supaya Liquid tak usik teks.
+- `_posts/TARIKH-slug.html`: front matter (tajuk, ringkasan, tag, imej, thumbnail, penulis, senarai sumber, `cover`, `komen`, `pin`) dan isi HTML dalam `{% raw %}` supaya Liquid tak usik teks.
 - `assets/blog/TAHUN/slug/*.webp`: gambar (dan poster video) yang digunakan.
+- `assets/blog/TAHUN/slug/thumb-<hash>.webp`: thumbnail 480px dari cover.
 - `assets/blog/TAHUN/slug/*.mp4`: video yang diupload.
 - `assets/blog/TAHUN/slug/og.png`: imej OG automatik (kalau tiada cover).
+
+Mesej commit: `post: <tajuk>` atau `kemas kini: <tajuk>`, dengan baris "Diterbitkan dari Studio" (tiada email).
 
 Kalau slug atau tarikh post lama ditukar, fail lama dibuang dalam commit yang sama. **Tarik balik** buang fail post dari repo, tapi draf kekal dalam Studio.
 
@@ -189,6 +195,5 @@ Kod: `server/` (Hono, node:sqlite, sharp, ffmpeg, Anthropic SDK) dan `client/` (
 ## Kredit
 
 Ikon dari brand korokk (gerbang mihrab dengan prompt terminal), sama macam favicon korokk.com. Dua versi: [`docs/ikon.svg`](docs/ikon.svg) untuk mod cerah (kotak terakota, simbol krim) dan [`docs/ikon-gelap.svg`](docs/ikon-gelap.svg) untuk mod gelap (kotak krim, simbol terakota). Favicon dan ikon di bar atas Studio bertukar ikut tema.
-
 
 Font [Bricolage Grotesque](https://fonts.google.com/specimen/Bricolage+Grotesque) dan [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) dalam `fonts/` di bawah [SIL Open Font License](fonts/OFL.txt).

@@ -326,6 +326,50 @@ function prettyHtml(html) {
     .replace(/\n{2,}/g, '\n').trim();
 }
 
+// Lebar panel tetapan: seret pemegang, anak panah kiri/kanan, dua klik set semula. Disimpan dalam pelayar.
+const META_W = { lalai: 380, min: 300, max: 720 };
+function lebarPanel(body, grip) {
+  const had = () => Math.max(META_W.min, Math.min(META_W.max, body.clientWidth - 480));
+  const set = (w, simpan) => {
+    w = Math.round(Math.max(META_W.min, Math.min(had(), w)));
+    body.style.setProperty('--meta-w', `${w}px`);
+    grip.setAttribute('aria-valuenow', String(w));
+    if (simpan) try { localStorage.setItem('studio-meta-w', String(w)); } catch {}
+  };
+  grip.setAttribute('aria-valuemin', String(META_W.min));
+  grip.setAttribute('aria-valuemax', String(META_W.max));
+  let awal = META_W.lalai;
+  try { awal = Number(localStorage.getItem('studio-meta-w')) || awal; } catch {}
+  set(awal);
+  grip.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    grip.classList.add('is-drag');
+    body.classList.add('is-resize');
+    const kanan = body.getBoundingClientRect().right;
+    const gerak = (ev) => set(kanan - ev.clientX);
+    const lepas = () => {
+      grip.removeEventListener('pointermove', gerak);
+      grip.classList.remove('is-drag');
+      body.classList.remove('is-resize');
+      set(parseFloat(body.style.getPropertyValue('--meta-w')), true);
+    };
+    grip.addEventListener('pointermove', gerak);
+    grip.addEventListener('lostpointercapture', lepas, { once: true });
+  });
+  grip.addEventListener('dblclick', () => set(META_W.lalai, true));
+  grip.addEventListener('keydown', (e) => {
+    const langkah = e.shiftKey ? 64 : 16;
+    const kini = parseFloat(body.style.getPropertyValue('--meta-w')) || META_W.lalai;
+    if (e.key === 'ArrowLeft') set(kini + langkah, true);
+    else if (e.key === 'ArrowRight') set(kini - langkah, true);
+    else if (e.key === 'Home') set(META_W.lalai, true);
+    else return;
+    e.preventDefault();
+  });
+}
+
 async function editorView(id) {
   let d = await api(`/api/drafts/${id}`);
   view.innerHTML = `
@@ -348,6 +392,7 @@ async function editorView(id) {
           <div class="prose" id="editor"></div>
           <textarea class="ed__html mono" id="html" spellcheck="false" hidden></textarea>
         </div>
+        <div class="meta__grip" id="meta-grip" role="separator" aria-orientation="vertical" aria-controls="meta" aria-label="Laras lebar panel tetapan" tabindex="0" title="Seret untuk laras lebar. Dua klik untuk set semula."></div>
         <aside class="meta" id="meta">
           <div class="meta__group">
             <label class="field"><span class="mono">Slug (URL)</span>
@@ -851,6 +896,8 @@ async function editorView(id) {
     }
   });
   $('#meta').addEventListener('focusout', () => { if (!d.image || d.og_auto) flush().then(renderCover); });
+
+  lebarPanel($('.ed__body'), $('#meta-grip'));
 
   $('#meta-btn').addEventListener('click', (e) => {
     const open = $('#meta').classList.toggle('is-open');

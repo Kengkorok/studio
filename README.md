@@ -41,6 +41,7 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Kos setiap jana dipaparkan.
   - **Libatkan aku:** kotak dalam dialog jana (cover dan isi). Gambar muka dalam `data/rujukan/` (JPG/PNG/WebP, maks 4, potong ke kepala dan bahu) dihantar sebagai `input_references`, dan prompt minta ilustrasi, bukan foto. Kotak tersorok kalau folder kosong. Gambar rujukan tak masuk repo.
 - **Pin:** kotak **Pin di laman utama** dalam Tetapan. Post yang dipin keluar paling atas dalam "Tulisan terkini" korokk.com (`pin: true`).
+- **Panel Tetapan boleh dilaras:** seret garisan di tepi kiri panel (300 hingga 720px), atau fokus pada garisan dan tekan anak panah kiri/kanan. Dua klik untuk set semula ke 380px. Lebar disimpan dalam pelayar.
 - **Imej OG automatik:** post tanpa cover dapat kad 1200x630 bertajuk untuk pratonton link WhatsApp/Threads.
 - **Pratonton:** guna CSS blog sebenar dari korokk.com.
 - **Post lama:** post yang dah terbit (termasuk yang ditulis dalam Markdown) boleh dibuka dan dikemas kini.

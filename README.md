@@ -52,6 +52,11 @@ Jalan dalam Docker di server rumah, dibuka melalui Cloudflare Tunnel dan dikunci
   - Ditarik setiap 30 minit. Claude Haiku terjemah tajuk ke BM, ringkaskan dalam 15 patah perkataan, dan tolak item yang tak relevan.
   - "Tapisan" setiap sumber beritahu Claude berita jenis apa yang diambil; "buang" terus tolak item yang ada kata kunci tertentu.
   - Sumber dan kategori diurus dalam Studio (**Feed → Urus sumber**). Item disimpan 14 hari.
+- **Laman utama:** tab **Laman** sunting isi korokk.com tanpa kod, dari PC atau phone.
+  - Atas & hero, projek Lab (video, gambar atau tiga skrin phone), perenggan peralatan, seksyen kad, milestone, sosial, footer dan SEO.
+  - Seksyen kad boleh ditambah dan disusun (contoh Kerjaya, Pembelajaran & Kemahiran). Visual kad: gambar, nombor besar, terminal, papan tile atau tiada. Kad boleh dipindah antara seksyen.
+  - Setiap senarai ada tambah, buang dan ↑ ↓. Link yang tak selamat (contoh `javascript:`) ditanda merah dan dibuang masa simpan.
+  - Pratonton render templat sebenar dari repo (liquidjs). Terbit jadi satu commit; kalau `_data/laman.yml` diubah di luar Studio sejak draf dibuka, Studio tanya dulu sebelum tulis ganti.
 - **Statistik:** page view dan pelawat (sepanjang masa, 7 hari lepas, tahun ini), post paling dibaca, bilangan post dan komen.
   - Dikira oleh `main.js` di laman (`/hit` pada Worker `komen`, jadual `lawatan` dalam D1).
   - Browser yang buka Studio dapat cookie `korok_abai` pada `.korokk.com` dan tak dikira. Peranti lain: buka `korokk.com/?abai=1` sekali (`?abai=0` untuk batal).
@@ -175,6 +180,8 @@ Terbit menghasilkan **satu commit** yang mengandungi:
 Mesej commit: `post: <tajuk>` atau `kemas kini: <tajuk>`, dengan baris "Diterbitkan dari Studio" (tiada email).
 
 Kalau slug atau tarikh post lama ditukar, fail lama dibuang dalam commit yang sama. **Tarik balik** buang fail post dari repo, tapi draf kekal dalam Studio.
+
+**Laman utama** (tab Laman) pula commit `_data/laman.yml` dan media baru ke `assets/laman/`, dengan mesej `laman: kemas kini laman utama`. Media dalam `assets/laman/` yang tak dirujuk lagi dibuang dalam commit yang sama; aset asal dalam `assets/lab/` tak diusik. `index.html` laman ialah templat Liquid yang baca fail data tu (`_includes/laman/*`).
 
 ## Backup
 

@@ -20,6 +20,7 @@ import { requireAccess, authMode } from './access.js';
 import { agentRoutes, agentCount } from './agent.js';
 import { mcpRoutes } from './mcp.js';
 import { feedRoutes, mulaFeed } from './feed.js';
+import { lamanRoutes } from './laman.js';
 
 const SITE = (process.env.SITE_URL || 'https://korokk.com').replace(/\/$/, '');
 const STUDIO_URL = (process.env.STUDIO_URL || 'https://studio.korokk.com').replace(/\/$/, '');
@@ -33,6 +34,9 @@ const tarikh = (iso) => { const [y, m, d] = iso.split('-'); return `${d} ${BULAN
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const ID_RE = /^[0-9a-f-]{36}$/;
 const FILE_RE = /^[a-z0-9][a-z0-9._-]{0,120}$/;
+// Folder upload untuk media laman utama (tab Laman); guna laluan gambar/video draf yang sama
+const LAMAN_ID = '00000000-0000-4000-8000-00000001a3a0';
+const adaDraf = (id) => ID_RE.test(id) && (id === LAMAN_ID || !!getDraft(id));
 const TYPES = { webp: 'image/webp', png: 'image/png', mp4: 'video/mp4' };
 const hasMedia = (html) => /<(img|video|iframe)\b/.test(html);
 // Kotak sementara gambar AI yang belum siap: jangan terbit atau papar dalam pratonton
@@ -95,6 +99,9 @@ app.use('/api/*', async (c, next) => {
   if (c.req.method !== 'GET' && c.req.header('X-Studio') !== '1') return c.json({ ralat: 'Permintaan ditolak' }, 403);
   return next();
 });
+
+// Laman utama: draf, pratonton dan terbit _data/laman.yml
+app.route('/api/laman', lamanRoutes({ uploadId: LAMAN_ID, uploads: UPLOADS, site: SITE }));
 
 app.get('/api/me', (c) => c.json({ email: c.get('email'), repo: repoInfo.repo, site: SITE, komen: !!KOMEN_API, auth: authMode, coverAi: imagegenOn() ? IMAGE_MODEL : null, rujukan: failRujukan().length }));
 
@@ -192,7 +199,7 @@ app.put('/api/drafts/:id', async (c) => {
 
 app.delete('/api/drafts/:id', async (c) => {
   const id = c.req.param('id');
-  if (!ID_RE.test(id)) return c.json({ ralat: 'ID tak sah' }, 400);
+  if (!ID_RE.test(id) || id === LAMAN_ID) return c.json({ ralat: 'ID tak sah' }, 400);
   deleteDraft(id);
   await rm(join(UPLOADS, id), { recursive: true, force: true });
   return c.json({ ok: true });
@@ -202,7 +209,7 @@ app.delete('/api/drafts/:id', async (c) => {
 
 app.post('/api/drafts/:id/images', bodyLimit({ maxSize: 25 * 1024 * 1024 }), async (c) => {
   const id = c.req.param('id');
-  if (!ID_RE.test(id) || !getDraft(id)) return c.json({ ralat: 'Draf tiada' }, 404);
+  if (!adaDraf(id)) return c.json({ ralat: 'Draf tiada' }, 404);
   const form = await c.req.parseBody();
   const file = form.file;
   if (!(file instanceof File)) return c.json({ ralat: 'Tiada fail' }, 400);
@@ -217,7 +224,8 @@ app.post('/api/drafts/:id/images', bodyLimit({ maxSize: 25 * 1024 * 1024 }), asy
   const name = `${base}-${randomBytes(3).toString('hex')}.webp`;
   await mkdir(join(UPLOADS, id), { recursive: true });
   await writeFile(join(UPLOADS, id, name), webp);
-  return c.json({ url: `/uploads/${id}/${name}`, size: webp.length });
+  const saiz = await saizImej(webp);
+  return c.json({ url: `/uploads/${id}/${name}`, size: webp.length, width: saiz?.width, height: saiz?.height });
 });
 
 // Gambar AI (cover atau dalam isi). Dijana di belakang sebab Cloudflare putuskan permintaan
@@ -280,7 +288,7 @@ const jobs = new Map(); // up -> { id, status: 'proses' | 'siap' | 'gagal', resu
 app.post('/api/drafts/:id/video', async (c) => {
   const id = c.req.param('id');
   const up = c.req.query('up') || '';
-  if (!ID_RE.test(id) || !getDraft(id)) return c.json({ ralat: 'Draf tiada' }, 404);
+  if (!adaDraf(id)) return c.json({ ralat: 'Draf tiada' }, 404);
   if (!ID_RE.test(up) || jobs.has(up) || !c.req.raw.body) return c.json({ ralat: 'Upload tak sah' }, 400);
   const dir = join(UPLOADS, id);
   const tmp = join(dir, `.up-${up}`);

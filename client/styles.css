@@ -107,6 +107,41 @@ button { font: inherit; color: inherit; }
 .seg button { padding: 7px 14px; border: 0; border-radius: 999px; background: none; color: var(--muted); cursor: pointer; font-size: 12px; }
 .seg button[aria-selected="true"] { background: var(--raised); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .1); }
 
+/* Laman utama */
+.page--lm { width: min(100% - 48px, 1040px); }
+.lm__aksi { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lm { margin-top: 16px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.lm > summary { display: flex; align-items: baseline; gap: 12px; padding: 18px 22px; cursor: pointer; list-style: none; }
+.lm > summary::-webkit-details-marker { display: none; }
+.lm > summary::before { content: "▸"; color: var(--muted); transition: transform .15s ease; }
+.lm[open] > summary::before { transform: rotate(90deg); }
+.lm__title { font: 600 22px/1.2 var(--display); letter-spacing: -.02em; }
+.lm__nota { color: var(--muted); }
+.lm__body { display: grid; gap: 14px; padding: 4px 22px 22px; }
+.lm__row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.lm__row--3 { grid-template-columns: 2fr 2fr 1fr; }
+.lm__item { display: grid; gap: 14px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); }
+.lm__item .lm__item { background: var(--surface); }
+.lm__item-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lm__item-title { font: 600 17px/1.25 var(--display); letter-spacing: -.01em; overflow-wrap: anywhere; }
+.lm__ctl { display: inline-flex; gap: 4px; flex: none; }
+.lm__btn { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); color: var(--ink); cursor: pointer; font-size: 14px; }
+.lm__btn:hover:not(:disabled) { border-color: var(--ink); }
+.lm__btn:disabled { opacity: .35; cursor: default; }
+.lm__btn--rm { color: var(--danger); font-size: 17px; }
+.lm__btn--rm:hover:not(:disabled) { border-color: var(--danger); }
+.lm__add { justify-self: start; }
+.lm__line { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px 12px; align-items: end; }
+.lm__line--3 { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr) auto; }
+.lm__line--sosial { grid-template-columns: 130px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.6fr) auto; align-items: center; }
+.lm__line > .lm__btn { margin-bottom: 5px; }
+.lm__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.lm__media { display: grid; gap: 8px; align-content: start; }
+.lm__media img, .lm__media video { width: 100%; max-height: 220px; object-fit: contain; border-radius: 10px; background: var(--raised); border: 1px solid var(--line); }
+.lm__media-kosong { display: grid; place-items: center; height: 90px; border: 1px dashed var(--line); border-radius: 10px; color: var(--muted); }
+.lm__media-act { display: flex; gap: 6px; flex-wrap: wrap; }
+.input.is-err { border-color: var(--danger); }
+
 /* Statistik */
 .stats { width: 100%; margin-top: 8px; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 .stats th, .stats td { padding: 14px 0; border-bottom: 1px solid var(--line); text-align: right; font-weight: 400; }
@@ -363,6 +398,16 @@ button { font: inherit; color: inherit; }
   .meta.is-open { transform: none; }
 }
 @media (max-width: 720px) {
+  .page--lm { width: calc(100% - 32px); }
+  .lm__row, .lm__row--3 { grid-template-columns: 1fr; }
+  .lm__line, .lm__line--3 { grid-template-columns: 1fr auto; }
+  .lm__line > .field:nth-child(2), .lm__line--3 > :nth-child(n+2):not(.lm__btn) { grid-column: 1; }
+  .lm__line--sosial { grid-template-columns: 1fr 1fr; }
+  .lm__line--sosial > .lm__ctl { grid-column: 1 / -1; justify-self: end; }
+  .lm__line--sosial > input[data-link] { grid-column: 1 / -1; }
+  .lm__line--sosial + .lm__line--sosial { padding-top: 12px; border-top: 1px dashed var(--line); }
+  .lm__body { padding-inline: 14px; }
+  .lm__item { padding: 14px; }
   .top { gap: 12px; padding-inline: 16px; }
   .top__brand { flex: none; }
   .top__nav {

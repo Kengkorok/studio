@@ -91,6 +91,53 @@ function toast(msg, kind = '') {
   toastTimer = setTimeout(() => { t.hidden = true; }, kind === 'err' ? 7000 : 4000);
 }
 
+// Upload gambar ke folder draf (atau folder laman): WebP, metadata dibuang. Pulangkan { url, size, width, height }
+async function muatGambar(id, file) {
+  const form = new FormData();
+  form.append('file', file);
+  toast(`Memproses ${esc(file.name)}...`);
+  const r = await api(`/api/drafts/${id}/images`, { method: 'POST', form });
+  toast(`Gambar sedia (${Math.round(r.size / 1024)} KB WebP)`, 'ok');
+  return r;
+}
+
+// Video: hantar 32MB setiap cebisan, kemudian tunggu server siap tukar ke MP4. Pulangkan { url, poster, width, height, size }
+async function muatVideo(id, file) {
+  if (file.size > 1024 ** 3) throw new Error('Video melebihi 1GB.');
+  const CHUNK = 32 * 1024 * 1024;
+  const up = crypto.randomUUID();
+  let off = 0;
+  do {
+    const end = Math.min(off + CHUNK, file.size);
+    const last = end >= file.size ? `&end=1&name=${encodeURIComponent(file.name)}` : '';
+    toast(`Upload ${esc(file.name)}... ${Math.round((end / file.size) * 100) || 0}%`);
+    await api(`/api/drafts/${id}/video?up=${up}&offset=${off}${last}`, { method: 'POST', form: file.slice(off, end) });
+    off = end;
+  } while (off < file.size);
+  const t0 = Date.now();
+  for (;;) {
+    toast(`Memproses video... ${Math.round((Date.now() - t0) / 1000)}s <span class="muted">(boleh terus menulis)</span>`);
+    await new Promise((r) => setTimeout(r, 2000));
+    const job = await api(`/api/drafts/${id}/video/${up}`);
+    if (job.status === 'gagal') throw new Error(job.ralat);
+    if (job.status === 'siap') {
+      toast(`Video sedia (${(job.result.size / 1048576).toFixed(1)} MB MP4)`, 'ok');
+      return job.result;
+    }
+  }
+}
+
+// Pilih satu fail dari peranti
+function pilihFail(accept) {
+  return new Promise((resolve) => {
+    const inp = document.createElement('input');
+    inp.type = 'file';
+    inp.accept = accept;
+    inp.addEventListener('change', () => resolve(inp.files[0] || null), { once: true });
+    inp.click();
+  });
+}
+
 // ---------- Tag: cadangan dari tag yang pernah diguna ----------
 
 let knownTags = null;
@@ -238,7 +285,7 @@ let cleanup = null;
 async function route() {
   if (cleanup) { await cleanup(); cleanup = null; }
   const hash = location.hash.slice(1) || '/';
-  const nav = hash.startsWith('/komen') ? 'komen' : hash.startsWith('/statistik') ? 'statistik' : hash.startsWith('/feed') ? 'feed' : 'tulisan';
+  const nav = hash.startsWith('/komen') ? 'komen' : hash.startsWith('/statistik') ? 'statistik' : hash.startsWith('/feed') ? 'feed' : hash.startsWith('/laman') ? 'laman' : 'tulisan';
   document.querySelectorAll('[data-nav]').forEach((a) => a.classList.toggle('is-on', a.dataset.nav === nav));
   document.querySelector('.top__nav .is-on')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   const m = hash.match(/^\/tulis\/([0-9a-f-]{36})$/);
@@ -248,6 +295,7 @@ async function route() {
     else if (nav === 'statistik') await statistikView();
     else if (hash === '/feed/urus') await urusFeedView();
     else if (nav === 'feed') await feedView();
+    else if (nav === 'laman') await lamanView();
     else await listView();
   } catch (e) {
     view.innerHTML = `<section class="page"><p class="empty">${esc(e.message)}</p></section>`;
@@ -662,39 +710,8 @@ async function editorView(id) {
   htmlEl.addEventListener('input', () => queue({ body: htmlEl.value }));
 
   // ----- Gambar -----
-  async function upload(file) {
-    const form = new FormData();
-    form.append('file', file);
-    toast(`Memproses ${esc(file.name)}...`);
-    const { url, size } = await api(`/api/drafts/${id}/images`, { method: 'POST', form });
-    toast(`Gambar sedia (${Math.round(size / 1024)} KB WebP)`, 'ok');
-    return url;
-  }
-  // Video: hantar 32MB setiap cebisan, kemudian tunggu server siap tukar ke MP4
-  async function uploadVideo(file) {
-    if (file.size > 1024 ** 3) throw new Error('Video melebihi 1GB.');
-    const CHUNK = 32 * 1024 * 1024;
-    const up = crypto.randomUUID();
-    let off = 0;
-    do {
-      const end = Math.min(off + CHUNK, file.size);
-      const last = end >= file.size ? `&end=1&name=${encodeURIComponent(file.name)}` : '';
-      toast(`Upload ${esc(file.name)}... ${Math.round((end / file.size) * 100) || 0}%`);
-      await api(`/api/drafts/${id}/video?up=${up}&offset=${off}${last}`, { method: 'POST', form: file.slice(off, end) });
-      off = end;
-    } while (off < file.size);
-    const t0 = Date.now();
-    for (;;) {
-      toast(`Memproses video... ${Math.round((Date.now() - t0) / 1000)}s <span class="muted">(boleh terus menulis)</span>`);
-      await new Promise((r) => setTimeout(r, 2000));
-      const job = await api(`/api/drafts/${id}/video/${up}`);
-      if (job.status === 'gagal') throw new Error(job.ralat);
-      if (job.status === 'siap') {
-        toast(`Video sedia (${(job.result.size / 1048576).toFixed(1)} MB MP4)`, 'ok');
-        return job.result;
-      }
-    }
-  }
+  const upload = async (file) => (await muatGambar(id, file)).url;
+  const uploadVideo = (file) => muatVideo(id, file);
   // Masukkan gambar/video di kursor; teks yang sedang dipilih tak diganti
   const insert = (content) => {
     if (!alive) return;
@@ -1325,6 +1342,379 @@ function sumberForm(slot, data, s, selesai) {
   });
   slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
   (jenis.value === 'leekduck' ? jenis : form.elements.alamat).focus({ preventScroll: true });
+}
+
+// ---------- Laman utama (korokk.com) ----------
+
+const LAMAN_BARU = {
+  projek: () => ({ nama: 'Projek baru', ringkasan: '', warna: 'mint', link: '', badge: '', segera: '', media: { jenis: 'video', bar: '', video: '', video_phone: '', poster: '', alt: '' }, links: [] }),
+  link: () => ({ teks: 'Buka', url: '' }),
+  seksyen: () => ({ id: '', tajuk: 'Seksyen baru', nota: '', kad: [], milestone: [] }),
+  kad: () => ({ kicker: '', live: false, tajuk: 'Kad baru', peranan: '', huraian: '', chips: [], warna: 'cream', visual: { jenis: 'tiada' } }),
+  baris: () => ({ jenis: 'ok', teks: '', nota: '' }),
+  tile: () => ({ nama: '', label: '' }),
+  milestone: () => ({ tarikh: '', tajuk: '', huraian: '' }),
+  sosial: () => ({ ikon: 'link', label: '', nota: '', url: '' }),
+  footer: () => '',
+};
+const LAMAN_LABEL = {
+  warna_lab: { mint: 'Hijau pudar', lilac: 'Ungu', sky: 'Biru kelabu', butter: 'Kuning mentega', rose: 'Merah jambu' },
+  warna_kad: { green: 'Hijau', cream: 'Krim', ink: 'Gelap', sky: 'Biru kelabu' },
+  media: { video: 'Video dalam browser', gambar: 'Gambar dalam browser', phone: 'Tiga skrin phone' },
+  visual: { tiada: 'Tiada (teks penuh)', gambar: 'Gambar (1–2)', nombor: 'Nombor besar', terminal: 'Terminal', papan: 'Papan tile' },
+  baris: { cmd: '$ arahan', dim: 'Teks kelabu', ok: '✓ lulus', run: '● sedang jalan', selesai: 'Penutup hijau', teks: 'Teks biasa' },
+  ikon: { github: 'GitHub', threads: 'Threads', tiktok: 'TikTok', kofi: 'Ko-fi', instagram: 'Instagram', youtube: 'YouTube', facebook: 'Facebook', x: 'X', linkedin: 'LinkedIn', whatsapp: 'WhatsApp', telegram: 'Telegram', email: 'Email', link: 'Link lain' },
+};
+// Sama macam pengesahan server (server/laman.js): link lain dibuang masa simpan
+const LINK_OK = /^(https?:\/\/\S+|mailto:\S+|tel:[\d+ -]+|#[\w-]*|\/[\w./?=&%#-]*|[a-z0-9][\w./?=&%#-]*)$/i;
+
+async function lamanView() {
+  let { data: L, dirty, updated_at: dikemas, uploadId, pilihan } = await api('/api/laman');
+  const terbuka = new Set(['atas']);
+  let saveTimer = null;
+  let saving = Promise.resolve();
+  let pending = false;
+  // Pendengar dipasang pada root ni (bukan #view) supaya hilang bila tab lain dibuka
+  view.innerHTML = '<div id="lm-root"></div>';
+  const root = $('#lm-root');
+
+  const ambil = (path) => path.split('.').reduce((o, k) => o?.[k], L);
+  const letak = (path, v) => {
+    const ks = path.split('.');
+    const last = ks.pop();
+    ks.reduce((o, k) => o[k], L)[last] = v;
+  };
+  const imgUrl = (s) => (s && s.startsWith('assets/') ? `${me.site}/${s}` : s || '');
+  const pilihHtml = (list, labels, v) => list.map((x) => `<option value="${x}" ${x === v ? 'selected' : ''}>${esc(labels[x] || x)}</option>`).join('');
+
+  // ----- Medan -----
+  const medan = (label, path, { panjang, hint, link, ph = '' } = {}) => {
+    const v = ambil(path) ?? '';
+    const ralat = link && v && !LINK_OK.test(v);
+    const el = panjang
+      ? `<textarea class="input" rows="${panjang}" data-p="${path}" placeholder="${esc(ph)}">${esc(v)}</textarea>`
+      : `<input class="input ${ralat ? 'is-err' : ''}" data-p="${path}" ${link ? 'data-link' : ''} value="${esc(v)}" placeholder="${esc(ph)}">`;
+    return `<label class="field"><span class="mono">${label}</span>${el}${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
+  };
+  const senaraiPilih = (label, path, list, labels, semula = false) => `<label class="field"><span class="mono">${label}</span>
+    <select class="input" data-p="${path}" ${semula ? 'data-semula' : ''}>${pilihHtml(list, labels, ambil(path))}</select></label>`;
+  const kotak = (label, path) => `<label class="check"><input type="checkbox" data-p="${path}" ${ambil(path) ? 'checked' : ''}> ${label}</label>`;
+  const chips = (label, path) => `<label class="field"><span class="mono">${label}</span>
+    <input class="input" data-p="${path}" data-chips value="${esc((ambil(path) || []).join(', '))}" placeholder="Docker, Linux, CI/CD"><span class="hint">Dipisah koma, maksimum 6.</span></label>`;
+
+  // Satu item dalam senarai: tajuk kecil, butang ↑ ↓ dan buang
+  const item = (list, i, tajuk, isi, sah = false) => `
+    <div class="lm__item">
+      <div class="lm__item-head">
+        <span class="lm__item-title">${esc(tajuk || 'Tanpa nama')}</span>
+        <span class="lm__ctl">
+          <button class="lm__btn" type="button" data-act="up" data-l="${list}" data-i="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Naik">↑</button>
+          <button class="lm__btn" type="button" data-act="down" data-l="${list}" data-i="${i}" ${i === ambil(list).length - 1 ? 'disabled' : ''} aria-label="Turun">↓</button>
+          <button class="lm__btn lm__btn--rm" type="button" data-act="rm" data-l="${list}" data-i="${i}" ${sah ? 'data-sah' : ''} aria-label="Buang">×</button>
+        </span>
+      </div>
+      ${isi}
+    </div>`;
+  const tambah = (list, baru, label, had = 99) => (ambil(list).length < had
+    ? `<button class="btn btn--sm btn--ghost lm__add" type="button" data-act="add" data-l="${list}" data-baru="${baru}">${label}</button>` : '');
+
+  // Gambar: kecil dengan butang tukar/buang, atau butang upload
+  const gambar = (path, { alt = false, buang = true } = {}) => {
+    const g = ambil(path) || {};
+    return `<div class="lm__media">
+      ${g.src ? `<img src="${esc(imgUrl(g.src))}" alt="">` : '<span class="lm__media-kosong mono">tiada gambar</span>'}
+      <span class="lm__media-act">
+        <button class="btn btn--sm" type="button" data-act="img" data-p="${path}">${g.src ? 'Tukar' : 'Upload gambar'}</button>
+        ${buang ? `<button class="btn btn--sm btn--ghost btn--danger-text" type="button" data-act="rm" data-l="${path.replace(/\.\d+$/, '')}" data-i="${path.split('.').pop()}">Buang</button>` : ''}
+      </span>
+      ${alt ? medan('Teks alt', `${path}.alt`, { ph: 'Terangkan gambar' }) : ''}
+    </div>`;
+  };
+  const tambahGambar = (list, had) => (ambil(list).length < had ? `<button class="btn btn--sm btn--ghost lm__add" type="button" data-act="img-add" data-l="${list}">+ Gambar</button>` : '');
+
+  // ----- Bahagian -----
+  const bahagian = (k, tajuk, nota, isi) => `
+    <details class="lm" data-k="${k}" ${terbuka.has(k) ? 'open' : ''}>
+      <summary><span class="lm__title">${tajuk}</span><span class="lm__nota mono">${nota}</span></summary>
+      <div class="lm__body">${isi}</div>
+    </details>`;
+
+  const projekHtml = (p, i) => {
+    const b = `lab.projek.${i}`;
+    const m = p.media;
+    let media = senaraiPilih('Jenis media', `${b}.media.jenis`, pilihan.media, LAMAN_LABEL.media, true);
+    if (m.jenis === 'video') {
+      media += `<div class="lm__media">
+        ${m.video ? `<video src="${esc(imgUrl(m.video))}" poster="${esc(imgUrl(m.poster))}" muted controls preload="metadata"></video>` : '<span class="lm__media-kosong mono">tiada video</span>'}
+        <span class="lm__media-act">
+          <button class="btn btn--sm" type="button" data-act="video" data-p="${b}.media">${m.video ? 'Tukar video' : 'Upload video'}</button>
+          ${m.video ? `<button class="btn btn--sm btn--ghost" type="button" data-act="poster" data-p="${b}.media">Tukar poster</button>` : ''}
+        </span></div>
+        <div class="lm__row">${medan('Teks bar browser', `${b}.media.bar`, { ph: 'korokk.com/projek' })}${medan('Teks alt video', `${b}.media.alt`, { ph: 'Apa yang berlaku dalam video' })}</div>`;
+    } else if (m.jenis === 'gambar') {
+      media += (m.gambar[0] ? gambar(`${b}.media.gambar.0`) : tambahGambar(`${b}.media.gambar`, 1))
+        + `<div class="lm__row">${medan('Teks bar browser', `${b}.media.bar`)}${medan('Teks alt', `${b}.media.alt`)}</div>`;
+    } else {
+      media += `<div class="lm__grid">${m.gambar.map((_, j) => gambar(`${b}.media.gambar.${j}`, { alt: true })).join('')}</div>${tambahGambar(`${b}.media.gambar`, 3)}
+        <p class="hint">Tangkapan skrin phone menegak. Maksimum 3.</p>`;
+    }
+    return item('lab.projek', i, p.nama, `
+      <div class="lm__row">${medan('Nama projek', `${b}.nama`)}${senaraiPilih('Warna latar', `${b}.warna`, pilihan.warna_lab, LAMAN_LABEL.warna_lab)}</div>
+      ${medan('Ringkasan', `${b}.ringkasan`, { panjang: 3 })}
+      <div class="lm__row">${medan('Link bila kad diklik', `${b}.link`, { link: true, ph: '/projek/ atau https://…', hint: 'Kosongkan kalau tiada.' })}${medan('Lencana atas', `${b}.badge`, { ph: 'Preview · dalam proses' })}</div>
+      ${media}
+      <span class="mono field__label">Butang bawah projek</span>
+      ${p.links.map((l, j) => `<div class="lm__line">${medan('Teks', `${b}.links.${j}.teks`)}${medan('Link', `${b}.links.${j}.url`, { link: true })}
+        <button class="lm__btn lm__btn--rm" type="button" data-act="rm" data-l="${b}.links" data-i="${j}" aria-label="Buang butang">×</button></div>`).join('')}
+      ${tambah(`${b}.links`, 'link', '+ Butang', 4)}
+      ${medan('Ganti butang dengan teks', `${b}.segera`, { ph: 'Akan dilancarkan', hint: 'Kalau diisi, butang di atas tak dipapar.' })}`, true);
+  };
+
+  const visualHtml = (v, b) => {
+    let h = senaraiPilih('Visual kanan', `${b}.visual.jenis`, pilihan.visual, LAMAN_LABEL.visual, true);
+    if (v.jenis === 'gambar') h += `<div class="lm__grid">${v.gambar.map((_, j) => gambar(`${b}.visual.gambar.${j}`)).join('')}</div>${tambahGambar(`${b}.visual.gambar`, 2)}<p class="hint">Gambar kedua bertindih di bawah gambar pertama.</p>`;
+    if (v.jenis === 'nombor') h += `<div class="lm__row">${medan('Nombor', `${b}.visual.nombor`, { ph: '5½' })}${medan('Unit', `${b}.visual.unit`, { ph: 'tahun' })}</div>`;
+    if (v.jenis === 'terminal') {
+      h += v.baris.map((r, j) => `<div class="lm__line lm__line--3">
+          <select class="input" data-p="${b}.visual.baris.${j}.jenis" data-semula aria-label="Jenis baris">${pilihHtml(pilihan.baris, LAMAN_LABEL.baris, r.jenis)}</select>
+          <input class="input" data-p="${b}.visual.baris.${j}.teks" value="${esc(r.teks)}" placeholder="Teks baris" aria-label="Teks baris">
+          ${['ok', 'run'].includes(r.jenis) ? `<input class="input" data-p="${b}.visual.baris.${j}.nota" value="${esc(r.nota || '')}" placeholder="Nota" aria-label="Nota">` : '<span></span>'}
+          <button class="lm__btn lm__btn--rm" type="button" data-act="rm" data-l="${b}.visual.baris" data-i="${j}" aria-label="Buang baris">×</button></div>`).join('')
+        + tambah(`${b}.visual.baris`, 'baris', '+ Baris', 14);
+    }
+    if (v.jenis === 'papan') {
+      h += `<div class="lm__row">${medan('Tajuk papan', `${b}.visual.tajuk`, { ph: 'korok@homelab' })}${medan('Status', `${b}.visual.status`, { ph: 'semua sihat' })}</div>`
+        + v.tile.map((t, j) => `<div class="lm__line">${medan('Nama', `${b}.visual.tile.${j}.nama`)}${medan('Label', `${b}.visual.tile.${j}.label`)}
+          <button class="lm__btn lm__btn--rm" type="button" data-act="rm" data-l="${b}.visual.tile" data-i="${j}" aria-label="Buang tile">×</button></div>`).join('')
+        + tambah(`${b}.visual.tile`, 'tile', '+ Tile', 12);
+    }
+    return h;
+  };
+
+  const kadHtml = (k, i, s) => {
+    const b = `seksyen_kad.${s}.kad.${i}`;
+    return item(`seksyen_kad.${s}.kad`, i, k.tajuk, `
+      <div class="lm__row">${medan('Tajuk kad', `${b}.tajuk`)}${senaraiPilih('Warna kad', `${b}.warna`, pilihan.warna_kad, LAMAN_LABEL.warna_kad)}</div>
+      <div class="lm__row">${medan('Baris atas (tarikh · tempat)', `${b}.kicker`, { ph: 'Dis 2024 – Kini · Bukit Jalil' })}<div class="field">${kotak('Titik hijau "sedang berjalan"', `${b}.live`)}</div></div>
+      ${L.seksyen_kad.length > 1 ? `<label class="field"><span class="mono">Seksyen</span><select class="input" data-pindah="${s}.${i}">${L.seksyen_kad.map((x, n) => `<option value="${n}" ${n === s ? 'selected' : ''}>${esc(x.tajuk || 'Tanpa nama')}</option>`).join('')}</select><span class="hint">Pindah kad ni ke seksyen lain.</span></label>` : ''}
+      ${medan('Peranan', `${b}.peranan`)}
+      ${medan('Huraian', `${b}.huraian`, { panjang: 3 })}
+      ${chips('Chip bawah', `${b}.chips`)}
+      ${visualHtml(k.visual, b)}`, true);
+  };
+
+  const seksyenHtml = (sk, s) => {
+    const b = `seksyen_kad.${s}`;
+    return item('seksyen_kad', s, `Seksyen: ${sk.tajuk}`, `
+      <div class="lm__row">${medan('Tajuk seksyen', `${b}.tajuk`)}${medan('Nota tepi', `${b}.nota`, { panjang: 2, ph: '2019 – 2026\n7 tahun dengan MAIWP' })}</div>
+      <span class="mono field__label">Kad (${sk.kad.length})</span>
+      ${sk.kad.map((k, i) => kadHtml(k, i, s)).join('')}
+      ${tambah(`${b}.kad`, 'kad', '+ Kad', 20)}
+      <span class="mono field__label">Milestone bawah kad</span>
+      ${sk.milestone.map((m, j) => `<div class="lm__line lm__line--3">${medan('Tarikh', `${b}.milestone.${j}.tarikh`)}${medan('Tajuk', `${b}.milestone.${j}.tajuk`)}${medan('Huraian', `${b}.milestone.${j}.huraian`)}
+        <button class="lm__btn lm__btn--rm" type="button" data-act="rm" data-l="${b}.milestone" data-i="${j}" aria-label="Buang milestone">×</button></div>`).join('')}
+      ${tambah(`${b}.milestone`, 'milestone', '+ Milestone', 6)}`, true);
+  };
+
+  function render() {
+    const y = scrollY;
+    root.innerHTML = `
+      <section class="page page--lm">
+        <div class="page__head">
+          <h1 class="page__title">Laman</h1>
+          <div class="lm__aksi">
+            <span class="mono muted" id="lm-status">${dirty ? 'Ada perubahan belum terbit' : 'Sama dengan laman'}</span>
+            <button class="btn btn--sm btn--ghost" type="button" id="lm-semula">Muat semula</button>
+            <a class="btn btn--sm btn--ghost" id="lm-pratonton" href="/api/laman/pratonton" target="_blank" rel="noopener">Pratonton</a>
+            <button class="btn btn--sm btn--ink" type="button" id="lm-terbit">Terbit</button>
+          </div>
+        </div>
+        <p class="hint">Sunting isi laman utama <a href="${esc(me.site)}/" target="_blank" rel="noopener">${esc(me.site.replace(/^https?:\/\//, ''))}</a>. Perubahan disimpan automatik dalam Studio dan hanya keluar di laman bila kau tekan Terbit.</p>
+        ${bahagian('atas', 'Atas &amp; hero', 'tajuk, status, butang', `
+          <div class="lm__row">${medan('Tajuk besar baris 1', 'hero.tajuk_1')}${medan('Tajuk besar baris 2 (pudar)', 'hero.tajuk_2')}</div>
+          ${medan('Ayat bawah tajuk', 'hero.lede', { panjang: 2 })}
+          <div class="lm__row">${medan('Label status', 'status.label', { ph: 'Sedang membangunkan' })}${medan('Status', 'status.teks', { hint: 'Kosongkan untuk sorok status.' })}</div>
+          <div class="lm__row">${medan('Tagline bawah logo', 'nav.tag')}${medan('Teks tepi bar atas', 'nav.meta', { panjang: 2 })}</div>
+          <div class="lm__row lm__row--3">${medan('Butang atas', 'nav.cta.teks')}${medan('Link butang', 'nav.cta.link', { link: true })}${medan('Anak panah', 'nav.cta.arw', { ph: '↓' })}</div>
+          ${medan('Teks link Blog', 'nav.blog')}`)}
+        ${bahagian('lab', 'Lab: projek', `${L.lab.projek.length} projek`, `
+          <div class="lm__row">${medan('Label', 'lab.label', { ph: 'Lab:' })}${medan('Tajuk seksyen', 'lab.tajuk')}</div>
+          ${L.lab.projek.map(projekHtml).join('')}
+          ${tambah('lab.projek', 'projek', '+ Projek', 30)}`)}
+        ${bahagian('peralatan', 'Peralatan harian', 'satu perenggan', medan('Perenggan', 'peralatan', { panjang: 4, hint: 'Balut dengan **dua bintang** untuk huruf tebal.' }))}
+        ${bahagian('kad', 'Seksyen kad', `${L.seksyen_kad.length} seksyen`, `
+          <p class="hint">Setiap seksyen ada tajuk sendiri dan kad bertindan, contohnya Kerjaya, atau Pembelajaran &amp; Kemahiran. Susun dengan ↑ ↓.</p>
+          ${L.seksyen_kad.map(seksyenHtml).join('')}
+          ${tambah('seksyen_kad', 'seksyen', '+ Seksyen kad', 8)}`)}
+        ${bahagian('tulisan', 'Tulisan terkini', 'tajuk dan butang', `<div class="lm__row">${medan('Tajuk', 'tulisan.tajuk')}${medan('Butang', 'tulisan.butang')}</div><p class="hint">Senarai post diambil automatik dari blog.</p>`)}
+        ${bahagian('hubungi', 'Hubungi &amp; sosial', `${L.hubungi.sosial.length} link`, `
+          ${medan('Ayat atas', 'hubungi.pre')}
+          <div class="lm__row lm__row--3">${medan('Ajakan besar', 'hubungi.cta.teks', { panjang: 2 })}${medan('Link', 'hubungi.cta.link', { link: true })}${medan('Anak panah', 'hubungi.cta.arw', { ph: '↗' })}</div>
+          <span class="mono field__label">Butang sosial</span>
+          ${L.hubungi.sosial.map((so, j) => `<div class="lm__line lm__line--sosial">
+            <select class="input" data-p="hubungi.sosial.${j}.ikon" aria-label="Ikon">${pilihHtml(pilihan.ikon, LAMAN_LABEL.ikon, so.ikon)}</select>
+            <input class="input" data-p="hubungi.sosial.${j}.label" value="${esc(so.label)}" placeholder="Label" aria-label="Label">
+            <input class="input" data-p="hubungi.sosial.${j}.nota" value="${esc(so.nota)}" placeholder="Nota kecil (pilihan)" aria-label="Nota">
+            <input class="input ${so.url && !LINK_OK.test(so.url) ? 'is-err' : ''}" data-p="hubungi.sosial.${j}.url" data-link value="${esc(so.url)}" placeholder="https://… atau mailto:…" aria-label="Link">
+            <span class="lm__ctl">
+              <button class="lm__btn" type="button" data-act="up" data-l="hubungi.sosial" data-i="${j}" ${j === 0 ? 'disabled' : ''} aria-label="Naik">↑</button>
+              <button class="lm__btn" type="button" data-act="down" data-l="hubungi.sosial" data-i="${j}" ${j === L.hubungi.sosial.length - 1 ? 'disabled' : ''} aria-label="Turun">↓</button>
+              <button class="lm__btn lm__btn--rm" type="button" data-act="rm" data-l="hubungi.sosial" data-i="${j}" aria-label="Buang">×</button>
+            </span></div>`).join('')}
+          ${tambah('hubungi.sosial', 'sosial', '+ Butang sosial', 16)}`)}
+        ${bahagian('footer', 'Footer &amp; SEO', 'kaki laman, tajuk Google', `
+          ${L.footer.map((_, j) => `<div class="lm__line">${medan(`Teks ${j + 1}`, `footer.${j}`)}<button class="lm__btn lm__btn--rm" type="button" data-act="rm" data-l="footer" data-i="${j}" aria-label="Buang">×</button></div>`).join('')}
+          ${tambah('footer', 'footer', '+ Teks footer', 4)}
+          ${medan('Tajuk tab browser', 'meta.title')}
+          ${medan('Penerangan Google', 'meta.description', { panjang: 2 })}
+          <div class="lm__row">${medan('Tajuk pratonton link (WhatsApp)', 'meta.og_title')}${medan('Penerangan pratonton link', 'meta.og_description')}</div>`)}
+      </section>`;
+    scrollTo(0, y);
+  }
+
+  // ----- Simpan -----
+  const status = (t) => { const el = $('#lm-status'); if (el) el.textContent = t; };
+  const simpan = () => {
+    clearTimeout(saveTimer);
+    if (!pending) return saving;
+    pending = false;
+    status('Menyimpan...');
+    saving = saving.then(() => api('/api/laman', { method: 'PUT', body: { data: L } }))
+      .then((r) => { dirty = true; dikemas = r.updated_at; status(`Disimpan ${jam(r.updated_at)}`); })
+      .catch((e) => { pending = true; status('Gagal simpan'); toast(esc(e.message), 'err'); });
+    return saving;
+  };
+  const ubah = (segera = false) => {
+    pending = true;
+    status('Belum disimpan...');
+    clearTimeout(saveTimer);
+    if (segera) simpan(); else saveTimer = setTimeout(simpan, 1000);
+  };
+
+  // ----- Peristiwa -----
+  const onInput = (e) => {
+    const el = e.target.closest('[data-p]');
+    if (!el) return;
+    const v = el.type === 'checkbox' ? el.checked
+      : 'chips' in el.dataset ? el.value.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 6) : el.value;
+    letak(el.dataset.p, v);
+    if ('link' in el.dataset) el.classList.toggle('is-err', !!el.value && !LINK_OK.test(el.value.trim()));
+    if ('semula' in el.dataset) {
+      // Tukar jenis visual/media/baris: sediakan medan yang diperlukan
+      const ks = el.dataset.p.split('.');
+      ks.pop();
+      const o = ambil(ks.join('.'));
+      if (ks.at(-1) === 'visual') Object.assign(o, { gambar: o.gambar || [], baris: o.baris || [], tile: o.tile || [] });
+      if (ks.at(-1) === 'media') Object.assign(o, { gambar: o.gambar || [] });
+      render();
+      ubah(true);
+      return;
+    }
+    // Tajuk item dalam pengepala ikut berubah tanpa render semula
+    const head = el.closest('.lm__item')?.querySelector('.lm__item-title');
+    if (head && /\.(nama|tajuk)$/.test(el.dataset.p) && el.closest('.lm__item') === head.closest('.lm__item')) head.textContent = (el.dataset.p.includes('seksyen_kad') && !el.dataset.p.includes('.kad.') ? 'Seksyen: ' : '') + (el.value || 'Tanpa nama');
+    ubah();
+  };
+  root.addEventListener('input', onInput);
+  root.addEventListener('change', (e) => {
+    const pindah = e.target.dataset.pindah;
+    if (pindah) {
+      const [s, i] = pindah.split('.').map(Number);
+      const ke = Number(e.target.value);
+      if (ke === s) return;
+      L.seksyen_kad[ke].kad.push(...L.seksyen_kad[s].kad.splice(i, 1));
+      render();
+      ubah(true);
+      toast(`Kad dipindah ke ${esc(L.seksyen_kad[ke].tajuk)}.`, 'ok');
+      return;
+    }
+    if (e.target.matches('select, input[type="checkbox"]')) onInput(e);
+  });
+  root.addEventListener('toggle', (e) => {
+    const d = e.target.closest?.('details[data-k]');
+    if (d) { if (d.open) terbuka.add(d.dataset.k); else terbuka.delete(d.dataset.k); }
+  }, true);
+
+  root.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const { act, l: list, p: path } = b.dataset;
+    const i = Number(b.dataset.i);
+    try {
+      if (act === 'up' || act === 'down') {
+        const arr = ambil(list);
+        const j = act === 'up' ? i - 1 : i + 1;
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      } else if (act === 'rm') {
+        if ('sah' in b.dataset && !(await ask({ title: 'Buang item ni?', text: 'Item dan isinya akan dibuang dari draf laman.', ok: 'Buang', danger: true }))) return;
+        ambil(list).splice(i, 1);
+      } else if (act === 'add') {
+        ambil(list).push(LAMAN_BARU[b.dataset.baru]());
+      } else if (act === 'img' || act === 'img-add' || act === 'poster') {
+        const f = await pilihFail('image/*');
+        if (!f) return;
+        const r = await muatGambar(uploadId, f);
+        if (act === 'poster') ambil(path).poster = r.url;
+        else if (act === 'img-add') ambil(list).push({ src: r.url, w: r.width, h: r.height });
+        else Object.assign(ambil(path), { src: r.url, w: r.width, h: r.height });
+      } else if (act === 'video') {
+        const f = await pilihFail('video/*');
+        if (!f) return;
+        const r = await muatVideo(uploadId, f);
+        Object.assign(ambil(path), { video: r.url, poster: r.poster, video_phone: '', w: r.width, h: r.height });
+      } else return;
+    } catch (err) { toast(esc(err.message), 'err'); return; }
+    render();
+    ubah(true);
+  });
+
+  // ----- Pratonton, muat semula, terbit -----
+  root.addEventListener('click', async (e) => {
+    const id = e.target.closest('button, a')?.id;
+    if (id === 'lm-pratonton') {
+      e.preventDefault();
+      const w = window.open('about:blank', '_blank');
+      await simpan();
+      if (w) w.location = '/api/laman/pratonton';
+    } else if (id === 'lm-semula') {
+      if (!(await ask({ title: 'Muat semula dari laman?', text: 'Semua perubahan dalam Studio yang belum terbit akan hilang.', ok: 'Muat semula', danger: true }))) return;
+      clearTimeout(saveTimer);
+      pending = false;
+      ({ data: L, dirty } = await api('/api/laman/muat-semula', { method: 'POST' }));
+      render();
+      toast('Draf laman diganti dengan versi di laman.', 'ok');
+    } else if (id === 'lm-terbit') {
+      await simpan();
+      if (!(await ask({ title: 'Terbit laman utama?', text: `${me.site}/\nLive dalam lebih kurang 1 minit.`, ok: 'Terbit' }))) return;
+      const btn = e.target.closest('button');
+      const cuba = async (paksa) => api('/api/laman/terbit', { method: 'POST', body: { paksa } });
+      btn.disabled = true;
+      btn.textContent = 'Menerbit...';
+      try {
+        let r;
+        try { r = await cuba(false); } catch (err) {
+          if (!/diubah di GitHub/.test(err.message)) throw err;
+          if (!(await ask({ title: 'laman.yml diubah di luar Studio', text: `${err.message}`, ok: 'Tulis ganti', danger: true }))) return;
+          r = await cuba(true);
+        }
+        ({ data: L } = r);
+        dirty = false;
+        render();
+        toast(`Diterbit! <a href="${esc(r.url)}" target="_blank" rel="noopener">Buka laman ↗</a> <span class="muted">(tunggu ~1 minit)</span>`, 'ok');
+      } catch (err) { toast(esc(err.message), 'err'); } finally {
+        const b2 = $('#lm-terbit');
+        if (b2) { b2.disabled = false; b2.textContent = 'Terbit'; }
+      }
+    }
+  });
+
+  render();
+  const beforeUnload = (e) => { if (pending) { simpan(); e.preventDefault(); } };
+  addEventListener('beforeunload', beforeUnload);
+  cleanup = async () => {
+    removeEventListener('beforeunload', beforeUnload);
+    await simpan();
+  };
 }
 
 // ---------- Mula ----------
